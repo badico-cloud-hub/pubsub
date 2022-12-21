@@ -21,14 +21,16 @@ import (
 
 //DynamodbClient is struct for client dynamodb
 type DynamodbClient struct {
-	logger interfaces.ServiceLogger
-	client *dynamodb.DynamoDB
+	logger    interfaces.ServiceLogger
+	client    *dynamodb.DynamoDB
+	tableName string
 }
 
 //NewDynamodbClient return new client dynamodb
 func NewDynamodbClient() *DynamodbClient {
 	return &DynamodbClient{
-		logger: utils.NewLogger(os.Stdout),
+		logger:    utils.NewLogger(os.Stdout),
+		tableName: os.Getenv("DYNAMO_TABLE_NAME"),
 	}
 }
 
@@ -82,7 +84,7 @@ func (d *DynamodbClient) CreateSubscription(subs *dto.SubscriptionDTO) (dto.Subs
 			continue
 		}
 		input := &dynamodb.PutItemInput{
-			TableName: aws.String(os.Getenv("BATCH_TABLE")),
+			TableName: aws.String(d.tableName),
 			Item:      putItem,
 		}
 		_, err = d.client.PutItemWithContext(ctx, input)
@@ -108,7 +110,7 @@ func (d *DynamodbClient) ListSubscriptions(clientId string) ([]dto.SubscriptionD
 		ExpressionAttributeNames:  expr.Names(),
 		ExpressionAttributeValues: expr.Values(),
 		FilterExpression:          expr.Filter(),
-		TableName:                 aws.String(os.Getenv("BATCH_TABLE")),
+		TableName:                 aws.String(d.tableName),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
@@ -153,7 +155,7 @@ func (d *DynamodbClient) GetSubscription(clientId, event string) (entity.Subscri
 		ExpressionAttributeNames:  expr.Names(),
 		ExpressionAttributeValues: expr.Values(),
 		FilterExpression:          expr.Filter(),
-		TableName:                 aws.String(os.Getenv("BATCH_TABLE")),
+		TableName:                 aws.String(d.tableName),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
@@ -184,7 +186,7 @@ func (d *DynamodbClient) DeleteSubscription(clientId, idSubscription, event stri
 		return err
 	}
 	inputDelete := &dynamodb.DeleteItemInput{
-		TableName: aws.String(os.Getenv("BATCH_TABLE")),
+		TableName: aws.String(d.tableName),
 		Key:       item,
 	}
 	_, err = d.client.DeleteItemWithContext(ctx, inputDelete)
@@ -195,9 +197,9 @@ func (d *DynamodbClient) DeleteSubscription(clientId, idSubscription, event stri
 }
 
 //DescribeTable return informations from table
-func (d *DynamodbClient) DescribeTable(tableName string) (interface{}, error) {
+func (d *DynamodbClient) DescribeTable() (interface{}, error) {
 	input := &dynamodb.DescribeTableInput{
-		TableName: &tableName,
+		TableName: aws.String(d.tableName),
 	}
 	output, err := d.client.DescribeTable(input)
 	if err != nil {
