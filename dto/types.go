@@ -41,3 +41,29 @@ type NotifierDTO struct {
 	Payload   map[string]interface{} `json:"payload,omitempty"`
 	CreatedAt string                 `json:"createdAt,omitempty"`
 }
+
+//ServiceDTO is struct for dto the service
+type ServicesDTO struct {
+	Name      string   `json:"name,omitempty"`
+	Events    []string `json:"events,omitempty"`
+	ServiceId string   `json:"service_id,omitempty"`
+	CreatedAt string   `json:"created_at,omitempty"`
+}
+
+//ServiceEventsDTO is struct for dto the service events
+type ServiceEventsDTO struct {
+	Name      string `json:"name,omitempty"`
+	Service   string `json:"service,omitempty"`
+	ServiceId string `json:"service_id,omitempty"`
+	CreatedAt string `json:"created_at,omitempty"`
+	UpdatedAt string `json:"updated_at,omitempty"`
+}
+
+//ClientDTO is struct for dto the clients
+type ClientDTO struct {
+	ApiKey     string `json:"api_key,omitempty"`
+	Identifier string `json:"identifier,omitempty"`
+	Service    string `json:"service,omitempty"`
+	CreatedAt  string `json:"created_at,omitempty"`
+	UpdatedAt  string `json:"updated_at,omitempty"`
+}
