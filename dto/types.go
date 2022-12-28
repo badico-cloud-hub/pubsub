@@ -68,6 +68,7 @@ type ClientDTO struct {
 	UpdatedAt  string `json:"updated_at,omitempty"`
 }
 
+//AdminObject is struct the api key of admin
 type AdminObject struct {
 	ClientId string `json:"client_id"`
 	ApiKey   string `json:"api_key"`
