@@ -321,6 +321,37 @@ func (d *DynamodbClient) ExistClient(clientId, service string) (entity.Clients, 
 	return clients[0], true, nil
 }
 
+func (d *DynamodbClient) GetClientByApiKey(apiKey string) (entity.Clients, error) {
+	filt := expression.Name("GSIPK").Equal(expression.Value(apiKey))
+	expr, err := expression.NewBuilder().WithFilter(filt).Build()
+	if err != nil {
+		return entity.Clients{}, err
+	}
+
+	input := &dynamodb.ScanInput{
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		FilterExpression:          expr.Filter(),
+		TableName:                 aws.String(d.tableName),
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	output, err := d.client.ScanWithContext(ctx, input)
+	if err != nil {
+		return entity.Clients{}, err
+	}
+	clients := []entity.Clients{}
+	if err := dynamodbattribute.UnmarshalListOfMaps(output.Items, &clients); err != nil {
+		return entity.Clients{}, err
+	}
+	if *output.Count == 0 {
+		return entity.Clients{}, ErrorClientNotFound
+	}
+
+	return clients[0], nil
+}
+
 //DeleteClients remove client in table
 func (d *DynamodbClient) DeleteClients(apiKey, service string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
