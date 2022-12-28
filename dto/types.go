@@ -67,3 +67,8 @@ type ClientDTO struct {
 	CreatedAt  string `json:"created_at,omitempty"`
 	UpdatedAt  string `json:"updated_at,omitempty"`
 }
+
+type AdminObject struct {
+	ClientId string `json:"client_id"`
+	ApiKey   string `json:"api_key"`
+}
