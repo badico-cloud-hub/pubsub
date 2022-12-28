@@ -10,6 +10,7 @@ import (
 	"github.com/badico-cloud-hub/pubsub/dto"
 	"github.com/badico-cloud-hub/pubsub/infra"
 	"github.com/badico-cloud-hub/pubsub/interfaces"
+	"github.com/badico-cloud-hub/pubsub/middlewares"
 	"github.com/badico-cloud-hub/pubsub/utils"
 	"github.com/gorilla/mux"
 )
@@ -40,9 +41,9 @@ func NewServer(port string) *Server {
 	adminRouters := router.PathPrefix("/").Subrouter()
 	authRouters := router.PathPrefix("/").Subrouter()
 	notAuthRouters := router.PathPrefix("/").Subrouter()
-	adminRouters.Use(utils.LoggingMiddleware, utils.SetupHeadersMiddleware)
-	authRouters.Use(utils.LoggingMiddleware, utils.SetupHeadersMiddleware, utils.AuthorizeMiddleware)
-	notAuthRouters.Use(utils.LoggingMiddleware, utils.SetupHeadersMiddleware)
+	adminRouters.Use(middlewares.LoggingMiddleware, middlewares.SetupHeadersMiddleware)
+	authRouters.Use(middlewares.LoggingMiddleware, middlewares.SetupHeadersMiddleware, middlewares.AuthorizeMiddleware)
+	notAuthRouters.Use(middlewares.LoggingMiddleware, middlewares.SetupHeadersMiddleware)
 	return &Server{
 		mux:            router,
 		routersAdmin:   adminRouters,
@@ -581,7 +582,32 @@ func (s *Server) listClients(w http.ResponseWriter, r *http.Request) {
 	}
 }
 func (s *Server) deleteClients(w http.ResponseWriter, r *http.Request) {
-	//TODO: delete clients
+	service := mux.Vars(r)["service"]
+	identifier := mux.Vars(r)["identifier"]
+
+	client, exists, err := s.Dynamo.ExistClient(identifier, service)
+
+	if err != nil {
+		s.logger.Error(err.Error())
+		if err := json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "success"}); err != nil {
+			s.logger.Error(err.Error())
+		}
+		return
+	}
+
+	if exists {
+		if err := s.Dynamo.DeleteClients(client.GSIPK, service); err != nil {
+			s.logger.Error(err.Error())
+			_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
+			return
+		}
+	}
+
+	if err := json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "success"}); err != nil {
+		s.logger.Error(err.Error())
+		return
+	}
+
 }
 
 func (s *Server) testNotification(w http.ResponseWriter, r *http.Request) {

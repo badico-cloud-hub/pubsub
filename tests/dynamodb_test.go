@@ -285,3 +285,18 @@ func TestDeleteClients(t *testing.T) {
 		t.Errorf("TestDeleteClients: expect(nil) - got(%s)\n", err.Error())
 	}
 }
+
+func TestGetClientByApiKey(t *testing.T) {
+	if err := godotenv.Load("../.env"); err != nil {
+		t.Errorf("TestGetClientByApiKey: expect(nil) - got(%s)\n", err.Error())
+	}
+	dynamo := infra.NewDynamodbClient()
+	if err := dynamo.Setup(); err != nil {
+		t.Errorf("TestGetClientByApiKey: expect(nil) - got(%s)\n", err.Error())
+	}
+	client, err := dynamo.GetClientByApiKey("26b997a2428ae17b4a5c5f502910f41e52cac237f9dbff93fac4dff626ed1985")
+	if err != nil {
+		t.Errorf("TestGetClientByApiKey: expect(nil) - got(%s)\n", err.Error())
+	}
+	log.Printf("Client: %+v\n", client)
+}
