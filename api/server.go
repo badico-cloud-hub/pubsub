@@ -72,6 +72,19 @@ func (s *Server) setup() error {
 	return nil
 }
 
+//AddRouter add dynamic router for server
+func (s *Server) AddRouter(path string, handler func(w http.ResponseWriter, r *http.Request), middlewares ...mux.MiddlewareFunc) {
+	subrouter := s.mux.PathPrefix("/").Subrouter()
+	for _, midd := range middlewares {
+		if midd == nil {
+			log.Fatalln("middleware of type <nil> not permited")
+			return
+		}
+	}
+	subrouter.Use(middlewares...)
+	subrouter.HandleFunc(path, handler)
+}
+
 //Health is function the health server
 func (s *Server) Health() {
 	s.routersNotAuth.HandleFunc("/health", s.health).Methods(http.MethodGet)
