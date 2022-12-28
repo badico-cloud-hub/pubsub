@@ -321,6 +321,7 @@ func (d *DynamodbClient) ExistClient(clientId, service string) (entity.Clients, 
 	return clients[0], true, nil
 }
 
+//GetClientByApiKey return client by api key
 func (d *DynamodbClient) GetClientByApiKey(apiKey string) (entity.Clients, error) {
 	filt := expression.Name("GSIPK").Equal(expression.Value(apiKey))
 	expr, err := expression.NewBuilder().WithFilter(filt).Build()
