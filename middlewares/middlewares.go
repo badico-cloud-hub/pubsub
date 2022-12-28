@@ -1,6 +1,7 @@
 package middlewares
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -44,8 +45,8 @@ func AuthorizeMiddleware(next http.Handler) http.Handler {
 				w.WriteHeader(http.StatusForbidden)
 				if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "Not Authorized"}); err != nil {
 					logger.Error(err.Error())
-					return
 				}
+				return
 			}
 			r.Header.Add("client-id", client.Identifier)
 			next.ServeHTTP(w, r)
@@ -56,5 +57,49 @@ func AuthorizeMiddleware(next http.Handler) http.Handler {
 				return
 			}
 		}
+	})
+}
+
+//AuthorizeAdminMiddleware is middleware to authorize admin routers
+func AuthorizeAdminMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logger := utils.NewLogger(os.Stdout)
+		headerApiKey := r.Header.Get("api-key")
+		strBase64 := os.Getenv("ADMIN_APIS_KEY")
+		adminApisKeysJson, err := base64.StdEncoding.DecodeString(strBase64)
+
+		if err != nil {
+			logger.Error(err.Error())
+			w.WriteHeader(http.StatusForbidden)
+			if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "Not Authorized"}); err != nil {
+				logger.Error(err.Error())
+			}
+			return
+		}
+
+		adminObjects := []dto.AdminObject{}
+
+		if err := json.Unmarshal(adminApisKeysJson, &adminObjects); err != nil {
+			logger.Error(err.Error())
+			w.WriteHeader(http.StatusForbidden)
+			if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "Not Authorized"}); err != nil {
+				logger.Error(err.Error())
+			}
+			return
+		}
+
+		for _, admin := range adminObjects {
+			if admin.ApiKey == headerApiKey {
+				r.Header.Add("client-id", admin.ClientId)
+				next.ServeHTTP(w, r)
+				return
+			}
+		}
+
+		w.WriteHeader(http.StatusForbidden)
+		if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "Not Authorized"}); err != nil {
+			logger.Error(err.Error())
+		}
+		return
 	})
 }

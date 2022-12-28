@@ -41,7 +41,7 @@ func NewServer(port string) *Server {
 	adminRouters := router.PathPrefix("/").Subrouter()
 	authRouters := router.PathPrefix("/").Subrouter()
 	notAuthRouters := router.PathPrefix("/").Subrouter()
-	adminRouters.Use(middlewares.LoggingMiddleware, middlewares.SetupHeadersMiddleware)
+	adminRouters.Use(middlewares.LoggingMiddleware, middlewares.SetupHeadersMiddleware, middlewares.AuthorizeAdminMiddleware)
 	authRouters.Use(middlewares.LoggingMiddleware, middlewares.SetupHeadersMiddleware, middlewares.AuthorizeMiddleware)
 	notAuthRouters.Use(middlewares.LoggingMiddleware, middlewares.SetupHeadersMiddleware)
 	return &Server{
@@ -423,27 +423,32 @@ func (s *Server) addEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if exists {
-		//TODO: execute append with array of events the payload
-		existedEvent, err := s.Dynamo.GetServicesEvents(service, payload.Name)
-		if err != nil && err != infra.ErrorServiceEventNotFound {
-			s.logger.Error(err.Error())
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
-			return
+		for _, event := range payload.Events {
+			existedEvent, err := s.Dynamo.GetServicesEvents(service, event)
+			if err != nil && err != infra.ErrorServiceEventNotFound {
+				s.logger.Error(err.Error())
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
+				return
+			}
+
+			if existedEvent.ServiceEvent == event {
+				s.logger.Error(infra.ErrorServiceEventAlreadyExist.Error())
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: infra.ErrorServiceEventAlreadyExist.Error()})
+				return
+			}
+
+			_, err = s.Dynamo.PutEventService(service, serviceId, event)
+
+			if err != nil {
+				s.logger.Error(err.Error())
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
+				return
+			}
 		}
-		if existedEvent.ServiceEvent == payload.Name {
-			s.logger.Error(infra.ErrorServiceEventAlreadyExist.Error())
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: infra.ErrorServiceEventAlreadyExist.Error()})
-			return
-		}
-		_, err = s.Dynamo.PutEventService(service, serviceId, payload.Name)
-		if err != nil {
-			s.logger.Error(err.Error())
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
-			return
-		}
+
 		w.WriteHeader(http.StatusCreated)
 		if err := json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "success"}); err != nil {
 			s.logger.Error(err.Error())
