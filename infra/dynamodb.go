@@ -378,14 +378,21 @@ func (d *DynamodbClient) DeleteClients(apiKey, service string) error {
 
 //CreateServices execute creation the services in dynamo table
 func (d *DynamodbClient) CreateServices(serv dto.ServicesDTO) (string, error) {
+	secret := os.Getenv("SECRET")
 	services := []entity.Services{}
 	id := uuid.New()
 	for _, ev := range serv.Events {
+		plainKey := fmt.Sprintf("%s:%s:%s", ev, serv.Name, secret)
+		apiKey, err := utils.GenerateApiKey(plainKey)
+		if err != nil {
+			return "", err
+		}
 		service := entity.Services{
 			PK:           fmt.Sprintf("SERVICE#%s", id.String()),
 			SK:           fmt.Sprintf("SERVICE_EVENT#%s", ev),
 			GSIPK:        serv.Name,
 			GSISK:        fmt.Sprintf("SERVICE_EVENT#%s", ev),
+			ApiKey:       apiKey,
 			Name:         serv.Name,
 			ServiceEvent: ev,
 			ServiceId:    id.String(),
