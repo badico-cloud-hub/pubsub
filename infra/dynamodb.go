@@ -54,7 +54,6 @@ func (d *DynamodbClient) CreateSubscription(subs *dto.SubscriptionDTO) (dto.Subs
 	id := uuid.New()
 	subscriptionResult := dto.SubscriptionDTO{SubscriptionId: id.String()}
 	if len(subs.Events) > 0 {
-		// filteredsEvents := utils.FilterEvents(subs.Events)
 
 		for _, event := range subs.Events {
 			subscription := entity.Subscription{}
