@@ -30,6 +30,7 @@ type SubscriptionDTO struct {
 	SubscriptionUrl   string   `json:"subscription_url,omitempty"`
 	SubscriptionId    string   `json:"subscription_id,omitempty"`
 	SubscriptionEvent string   `json:"subscription_event,omitempty"`
+	AssociationId     string   `json:"association_id,omitempty"`
 	CreatedAt         string   `json:"createdAt,omitempty"`
 }
 
@@ -61,11 +62,12 @@ type ServiceEventsDTO struct {
 
 //ClientDTO is struct for dto the clients
 type ClientDTO struct {
-	ApiKey     string `json:"api_key,omitempty"`
-	Identifier string `json:"identifier,omitempty"`
-	Service    string `json:"service,omitempty"`
-	CreatedAt  string `json:"created_at,omitempty"`
-	UpdatedAt  string `json:"updated_at,omitempty"`
+	ApiKey        string `json:"api_key,omitempty"`
+	Identifier    string `json:"identifier,omitempty"`
+	Service       string `json:"service,omitempty"`
+	AssociationId string `json:"association_id,omitempty"`
+	CreatedAt     string `json:"created_at,omitempty"`
+	UpdatedAt     string `json:"updated_at,omitempty"`
 }
 
 //AdminObject is struct the api key of admin
