@@ -54,8 +54,8 @@ func (d *DynamodbClient) CreateSubscription(subs *dto.SubscriptionDTO) (dto.Subs
 	id := uuid.New()
 	subscriptionResult := dto.SubscriptionDTO{SubscriptionId: id.String()}
 	if len(subs.Events) > 0 {
-		filteredsEvents := utils.FilterEvents(subs.Events)
-		for _, event := range filteredsEvents {
+
+		for _, event := range subs.Events {
 			subscription := entity.Subscription{}
 			subscription.PK = fmt.Sprintf("SUBSCRIPTION#%s", id.String())
 			subscription.SK = fmt.Sprintf("SUBSCRIPTION_EVENT#%s", event)
@@ -65,6 +65,7 @@ func (d *DynamodbClient) CreateSubscription(subs *dto.SubscriptionDTO) (dto.Subs
 			subscription.SubscriptionEvent = event
 			subscription.SubscriptionId = id.String()
 			subscription.SubscriptionUrl = subs.Url
+			subscription.AssociationId = subs.AssociationId
 			subscription.CreatedAt = time.Now().Format("2006-01-02 15:04:05")
 			subscription.UpdatedAt = time.Now().Format("2006-01-02 15:04:05")
 
@@ -98,8 +99,8 @@ func (d *DynamodbClient) CreateSubscription(subs *dto.SubscriptionDTO) (dto.Subs
 }
 
 //ListSubscriptions return all subscriptions the client
-func (d *DynamodbClient) ListSubscriptions(clientId string) ([]dto.SubscriptionDTO, error) {
-	filt := expression.And(expression.Name("PK").BeginsWith("SUBSCRIPTION#"), expression.Name("client_id").Equal(expression.Value(clientId)))
+func (d *DynamodbClient) ListSubscriptions(associationId string) ([]dto.SubscriptionDTO, error) {
+	filt := expression.And(expression.Name("PK").BeginsWith("SUBSCRIPTION#"), expression.Name("association_id").Equal(expression.Value(associationId)))
 	expr, err := expression.NewBuilder().WithFilter(filt).Build()
 	if err != nil {
 		return []dto.SubscriptionDTO{}, err
@@ -132,6 +133,7 @@ func (d *DynamodbClient) ListSubscriptions(clientId string) ([]dto.SubscriptionD
 			subscription.ClientId = sliceSubs[0].ClientId
 			subscription.SubscriptionId = sliceSubs[0].SubscriptionId
 			subscription.SubscriptionUrl = sliceSubs[0].SubscriptionUrl
+			subscription.AssociationId = sliceSubs[0].AssociationId
 			for _, events := range sliceSubs {
 				subscription.Events = append(subscription.Events, events.SubscriptionEvent)
 			}
@@ -204,14 +206,15 @@ func (d *DynamodbClient) CreateClients(client dto.ClientDTO) (string, error) {
 		return "", err
 	}
 	newClient := entity.Clients{
-		PK:         fmt.Sprintf("CLIENT#%s", newApiKey),
-		SK:         fmt.Sprintf("CLIENT_SERVICE#%s", client.Service),
-		GSIPK:      newApiKey,
-		GSISK:      client.Service,
-		Identifier: client.Identifier,
-		Service:    client.Service,
-		CreatedAt:  time.Now().Format("2006-01-02 15:04:05"),
-		UpdatedAt:  time.Now().Format("2006-01-02 15:04:05"),
+		PK:            fmt.Sprintf("CLIENT#%s", newApiKey),
+		SK:            fmt.Sprintf("CLIENT_SERVICE#%s", client.Service),
+		GSIPK:         newApiKey,
+		GSISK:         client.Service,
+		Identifier:    client.Identifier,
+		Service:       client.Service,
+		AssociationId: client.AssociationId,
+		CreatedAt:     time.Now().Format("2006-01-02 15:04:05"),
+		UpdatedAt:     time.Now().Format("2006-01-02 15:04:05"),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()

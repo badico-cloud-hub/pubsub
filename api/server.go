@@ -208,8 +208,8 @@ func (s *Server) createSubscription(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listSubscriptions(w http.ResponseWriter, r *http.Request) {
-	clientId := r.Header.Get("client-id")
-	resultSubs, err := s.Dynamo.ListSubscriptions(clientId)
+	associationId := r.Header.Get("association_id")
+	resultSubs, err := s.Dynamo.ListSubscriptions(associationId)
 	if err != nil {
 		s.logger.Error(err.Error())
 		return
@@ -546,11 +546,12 @@ func (s *Server) getClients(w http.ResponseWriter, r *http.Request) {
 		for _, client := range clients {
 			if client.Service == service && client.Identifier == identifier {
 				newClient := dto.ClientDTO{
-					ApiKey:     client.GSIPK,
-					Identifier: client.Identifier,
-					Service:    client.Service,
-					CreatedAt:  client.CreatedAt,
-					UpdatedAt:  client.UpdatedAt,
+					ApiKey:        client.GSIPK,
+					Identifier:    client.Identifier,
+					Service:       client.Service,
+					AssociationId: client.AssociationId,
+					CreatedAt:     client.CreatedAt,
+					UpdatedAt:     client.UpdatedAt,
 				}
 				responseClients = append(responseClients, newClient)
 			}
@@ -559,11 +560,12 @@ func (s *Server) getClients(w http.ResponseWriter, r *http.Request) {
 		for _, client := range clients {
 			if client.Service == service {
 				newClient := dto.ClientDTO{
-					ApiKey:     client.GSIPK,
-					Identifier: client.Identifier,
-					Service:    client.Service,
-					CreatedAt:  client.CreatedAt,
-					UpdatedAt:  client.UpdatedAt,
+					ApiKey:        client.GSIPK,
+					Identifier:    client.Identifier,
+					Service:       client.Service,
+					AssociationId: client.AssociationId,
+					CreatedAt:     client.CreatedAt,
+					UpdatedAt:     client.UpdatedAt,
 				}
 				responseClients = append(responseClients, newClient)
 			}
@@ -585,11 +587,12 @@ func (s *Server) listClients(w http.ResponseWriter, r *http.Request) {
 	responseClients := []dto.ClientDTO{}
 	for _, client := range clients {
 		respClient := dto.ClientDTO{
-			ApiKey:     client.GSIPK,
-			Identifier: client.Identifier,
-			Service:    client.Service,
-			CreatedAt:  client.CreatedAt,
-			UpdatedAt:  client.UpdatedAt,
+			ApiKey:        client.GSIPK,
+			Identifier:    client.Identifier,
+			Service:       client.Service,
+			AssociationId: client.AssociationId,
+			CreatedAt:     client.CreatedAt,
+			UpdatedAt:     client.UpdatedAt,
 		}
 		responseClients = append(responseClients, respClient)
 	}

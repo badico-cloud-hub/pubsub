@@ -10,6 +10,7 @@ type Subscription struct {
 	SubscriptionEvent string `dynamodbav:"subscription_event,omitempty"`
 	SubscriptionUrl   string `dynamodbav:"subscription_url,omitempty"`
 	SubscriptionId    string `dynamodbav:"subscription_id,omitempty"`
+	AssociationId     string `dynamodbav:"association_id,omitempty"`
 	CreatedAt         string `dynamodbav:"createdAt,omitempty"`
 	UpdatedAt         string `dynamodbav:"updatedAt,omitempty"`
 }
