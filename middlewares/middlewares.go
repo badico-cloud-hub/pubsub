@@ -48,6 +48,7 @@ func AuthorizeMiddleware(next http.Handler) http.Handler {
 				}
 				return
 			}
+			r.Header.Add("association-id", client.AssociationId)
 			r.Header.Add("client-id", client.Identifier)
 			next.ServeHTTP(w, r)
 		} else {
