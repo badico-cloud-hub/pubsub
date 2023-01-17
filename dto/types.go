@@ -48,6 +48,8 @@ type ServicesDTO struct {
 	Name      string   `json:"name,omitempty"`
 	Events    []string `json:"events,omitempty"`
 	ServiceId string   `json:"service_id,omitempty"`
+	ApiKey    string   `json:"api_key,omitempty"`
+	Entity    string   `json:"entity,omitempty"`
 	CreatedAt string   `json:"created_at,omitempty"`
 }
 
