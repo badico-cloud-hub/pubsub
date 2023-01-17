@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/badico-cloud-hub/pubsub/dto"
 	"github.com/badico-cloud-hub/pubsub/infra"
@@ -163,20 +164,20 @@ func (s *Server) DeleteClients() {
 //AllRouters execute all routers the server
 func (s *Server) AllRouters() {
 	s.routersNotAuth.HandleFunc("/health", s.health).Methods(http.MethodGet)
-	s.routersAuth.HandleFunc("/subscriptions", s.listSubscriptions).Methods(http.MethodGet)
-	s.routersAuth.HandleFunc("/subscriptions", s.createSubscription).Methods(http.MethodPost)
-	s.routersAuth.HandleFunc("/subscriptions/{id}", s.deleteSubscription).Methods(http.MethodDelete)
-	s.routersAuth.HandleFunc("/subscriptions/test", s.testNotification).Methods(http.MethodPost)
-	s.routersAdmin.HandleFunc("/services", s.listServices).Methods(http.MethodGet)
 	s.routersAdmin.HandleFunc("/services", s.createServices).Methods(http.MethodPost)
+	s.routersAdmin.HandleFunc("/services", s.listServices).Methods(http.MethodGet)
 	s.routersAdmin.HandleFunc("/services/{service}", s.getServices).Methods(http.MethodGet)
-	s.routersAdmin.HandleFunc("/services/{service}/events", s.getServicesEvents).Methods(http.MethodGet)
 	s.routersAdmin.HandleFunc("/services/{service}", s.deleteServices).Methods(http.MethodDelete)
 	s.routersAdmin.HandleFunc("/services/{service}/events", s.addEvent).Methods(http.MethodPost)
+	s.routersAdmin.HandleFunc("/services/{service}/events", s.getServicesEvents).Methods(http.MethodGet)
 	s.routersAdmin.HandleFunc("/clients", s.createClients).Methods(http.MethodPost)
 	s.routersAdmin.HandleFunc("/clients", s.listClients).Methods(http.MethodGet)
 	s.routersAdmin.HandleFunc("/clients/{service}", s.getClients).Methods(http.MethodGet)
-	s.routersAdmin.HandleFunc("/clients/{service}/{identifier}", s.deleteClients).Methods(http.MethodDelete)
+	s.routersAdmin.HandleFunc("/clients/{service}/{association_id}", s.deleteClients).Methods(http.MethodDelete)
+	s.routersAuth.HandleFunc("/subscriptions", s.createSubscription).Methods(http.MethodPost)
+	s.routersAuth.HandleFunc("/subscriptions", s.listSubscriptions).Methods(http.MethodGet)
+	s.routersAuth.HandleFunc("/subscriptions/{id}", s.deleteSubscription).Methods(http.MethodDelete)
+	s.routersAuth.HandleFunc("/subscriptions/test", s.testNotification).Methods(http.MethodPost)
 
 }
 
@@ -189,7 +190,8 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) createSubscription(w http.ResponseWriter, r *http.Request) {
 	subs := dto.SubscriptionDTO{
-		ClientId: r.Header.Get("client-id"),
+		ClientId:      r.Header.Get("client-id"),
+		AssociationId: r.Header.Get("association-id"),
 	}
 	defer r.Body.Close()
 	if err := json.NewDecoder(r.Body).Decode(&subs); err != nil {
@@ -208,7 +210,7 @@ func (s *Server) createSubscription(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listSubscriptions(w http.ResponseWriter, r *http.Request) {
-	associationId := r.Header.Get("association_id")
+	associationId := r.Header.Get("association-id")
 	resultSubs, err := s.Dynamo.ListSubscriptions(associationId)
 	if err != nil {
 		s.logger.Error(err.Error())
@@ -223,36 +225,37 @@ func (s *Server) listSubscriptions(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) deleteSubscription(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
+	associationId := r.Header.Get("association-id")
 	clientId := r.Header.Get("client-id")
-	if clientId == "" {
-		if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "clientId is required"}); err != nil {
+	if associationId == "" {
+		if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "associationId is required"}); err != nil {
 			s.logger.Error(err.Error())
 			return
 		}
 	}
 	event := r.URL.Query().Get("event")
 	if event != "" {
-		subscription, err := s.Dynamo.GetSubscription(clientId, event)
+		subscription, err := s.Dynamo.GetSubscription(associationId, event)
 		if err != nil {
 			s.logger.Error(err.Error())
 		}
 		if subscription.ClientId == clientId && subscription.SubscriptionEvent == event {
-			if err := s.Dynamo.DeleteSubscription(clientId, id, event); err != nil {
+			if err := s.Dynamo.DeleteSubscription(clientId, event); err != nil {
 				s.logger.Error(err.Error())
 			}
 		}
 	} else {
-		subscriptions, err := s.Dynamo.ListSubscriptions(clientId)
+		subscriptions, err := s.Dynamo.ListSubscriptions(associationId)
 		if err != nil {
 			s.logger.Error(err.Error())
 		}
 		if len(subscriptions) == 0 {
-			s.logger.Info(fmt.Sprintf("not subscriptions for client_id [%s] and subscription_id [%s]\n", clientId, id))
+			s.logger.Info(fmt.Sprintf("not subscriptions for associationId [%s] and subscription_id [%s]\n", associationId, id))
 		}
 		for _, sub := range subscriptions {
 			if sub.SubscriptionId == id && sub.ClientId == clientId {
 				for _, ev := range sub.Events {
-					if err := s.Dynamo.DeleteSubscription(clientId, id, ev); err != nil {
+					if err := s.Dynamo.DeleteSubscription(clientId, ev); err != nil {
 						s.logger.Error(err.Error())
 					}
 				}
@@ -288,7 +291,7 @@ func (s *Server) createServices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	//TODO: Verify if array events is empty, and return error
-	serviceId, err := s.Dynamo.CreateServices(serviceDto)
+	apiKey, err := s.Dynamo.CreateServices(serviceDto)
 	if err != nil {
 		s.logger.Error(err.Error())
 		w.WriteHeader(http.StatusBadRequest)
@@ -296,7 +299,7 @@ func (s *Server) createServices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
-	if err := json.NewEncoder(w).Encode(dto.ServicesDTO{ServiceId: serviceId}); err != nil {
+	if err := json.NewEncoder(w).Encode(dto.ServicesDTO{ApiKey: apiKey}); err != nil {
 		s.logger.Error(err.Error())
 		return
 	}
@@ -315,6 +318,7 @@ func (s *Server) getServices(w http.ResponseWriter, r *http.Request) {
 	if len(serviceEvents) > 0 {
 		serviceDto.Name = serviceEvents[0].Name
 		serviceDto.ServiceId = serviceEvents[0].ServiceId
+		serviceDto.Entity = serviceEvents[0].Entity
 		serviceDto.CreatedAt = serviceEvents[0].CreatedAt
 		for _, event := range serviceEvents {
 			serviceDto.Events = append(serviceDto.Events, event.ServiceEvent)
@@ -372,6 +376,7 @@ func (s *Server) listServices(w http.ResponseWriter, r *http.Request) {
 	for _, serv := range services {
 		serviceDto := dto.ServicesDTO{
 			Name:      serv.Name,
+			Entity:    serv.Entity,
 			ServiceId: serv.ServiceId,
 			CreatedAt: serv.CreatedAt,
 		}
@@ -400,7 +405,7 @@ func (s *Server) deleteServices(w http.ResponseWriter, r *http.Request) {
 	if eventParam != "" {
 		for _, ev := range servicesEvents {
 			if eventParam == ev.ServiceEvent {
-				if err := s.Dynamo.DeleteServices(ev.ServiceId, eventParam); err != nil {
+				if err := s.Dynamo.DeleteServices(ev.Name, eventParam); err != nil {
 					s.logger.Error(err.Error())
 				}
 				break
@@ -408,7 +413,7 @@ func (s *Server) deleteServices(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		for _, ev := range servicesEvents {
-			if err := s.Dynamo.DeleteServices(ev.ServiceId, ev.ServiceEvent); err != nil {
+			if err := s.Dynamo.DeleteServices(ev.Name, ev.ServiceEvent); err != nil {
 				s.logger.Error(err.Error())
 				continue
 			}
@@ -488,11 +493,13 @@ func (s *Server) createClients(w http.ResponseWriter, r *http.Request) {
 	_, exists, err := s.Dynamo.ExistClient(client.Identifier, client.Service)
 	if err != nil && err != infra.ErrorClientNotFound {
 		s.logger.Error(err.Error())
+		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
 		return
 	}
 	if exists {
 		s.logger.Error(infra.ErrorClientAlreadyExist.Error())
+		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: infra.ErrorClientAlreadyExist.Error()})
 		return
 	}
@@ -504,6 +511,7 @@ func (s *Server) createClients(w http.ResponseWriter, r *http.Request) {
 	}
 	if !existService {
 		s.logger.Error(infra.ErrorServiceNotFound.Error())
+		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: infra.ErrorServiceNotFound.Error()})
 		return
 	}
@@ -546,7 +554,7 @@ func (s *Server) getClients(w http.ResponseWriter, r *http.Request) {
 		for _, client := range clients {
 			if client.Service == service && client.Identifier == identifier {
 				newClient := dto.ClientDTO{
-					ApiKey:        client.GSIPK,
+					ApiKey:        client.ApiKey,
 					Identifier:    client.Identifier,
 					Service:       client.Service,
 					AssociationId: client.AssociationId,
@@ -560,7 +568,7 @@ func (s *Server) getClients(w http.ResponseWriter, r *http.Request) {
 		for _, client := range clients {
 			if client.Service == service {
 				newClient := dto.ClientDTO{
-					ApiKey:        client.GSIPK,
+					ApiKey:        client.ApiKey,
 					Identifier:    client.Identifier,
 					Service:       client.Service,
 					AssociationId: client.AssociationId,
@@ -587,7 +595,7 @@ func (s *Server) listClients(w http.ResponseWriter, r *http.Request) {
 	responseClients := []dto.ClientDTO{}
 	for _, client := range clients {
 		respClient := dto.ClientDTO{
-			ApiKey:        client.GSIPK,
+			ApiKey:        client.ApiKey,
 			Identifier:    client.Identifier,
 			Service:       client.Service,
 			AssociationId: client.AssociationId,
@@ -604,9 +612,9 @@ func (s *Server) listClients(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) deleteClients(w http.ResponseWriter, r *http.Request) {
 	service := mux.Vars(r)["service"]
-	identifier := mux.Vars(r)["identifier"]
+	association_id := mux.Vars(r)["association_id"]
 
-	client, exists, err := s.Dynamo.ExistClient(identifier, service)
+	client, exists, err := s.Dynamo.ExistClient(association_id, service)
 
 	if err != nil {
 		s.logger.Error(err.Error())
@@ -616,8 +624,9 @@ func (s *Server) deleteClients(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	apiKey := strings.Split(client.PK, "#")[1]
 	if exists {
-		if err := s.Dynamo.DeleteClients(client.GSIPK, service); err != nil {
+		if err := s.Dynamo.DeleteClients(apiKey, service); err != nil {
 			s.logger.Error(err.Error())
 			_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
 			return
