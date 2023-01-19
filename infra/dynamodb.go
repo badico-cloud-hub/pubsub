@@ -148,7 +148,7 @@ func (d *DynamodbClient) ListSubscriptions(associationId string) ([]dto.Subscrip
 	return resultSubs, nil
 }
 
-//GetSubscription return subscription from event and client
+//GetSubscription return subscription from event and associationId
 func (d *DynamodbClient) GetSubscription(associationId, event string) (entity.Subscription, error) {
 	filt := expression.Key("INDEX_AUXILIAR_PK").Equal(expression.Value(fmt.Sprintf("ASSOCIATION#%s", associationId))).And(expression.Key("INDEX_AUXILIAR_SK").Equal(expression.Value(fmt.Sprintf("SUBSCRIPTION_EVENT#%s", event))))
 	expr, err := expression.NewBuilder().WithKeyCondition(filt).Build()
@@ -177,6 +177,37 @@ func (d *DynamodbClient) GetSubscription(associationId, event string) (entity.Su
 		return entity.Subscription{}, ErrorSubscriptinEventNotFound
 	}
 	return subscriptions[0], nil
+}
+
+//GetSubscription return subscription from part of a event and associationId
+func (d *DynamodbClient) GetSubscriptionByAssociationIdAndEvent(associationId, event string) ([]entity.Subscription, error) {
+	filt := expression.Key("INDEX_AUXILIAR_PK").Equal(expression.Value(fmt.Sprintf("ASSOCIATION#%s", associationId))).And(expression.Key("INDEX_AUXILIAR_SK").BeginsWith(fmt.Sprintf("SUBSCRIPTION_EVENT#%s", event)))
+	expr, err := expression.NewBuilder().WithKeyCondition(filt).Build()
+	if err != nil {
+		return []entity.Subscription{}, err
+	}
+
+	input := &dynamodb.QueryInput{
+		IndexName:                 &d.INDEX_AUXILIAR_ASSOCIATION,
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		KeyConditionExpression:    expr.KeyCondition(),
+		TableName:                 aws.String(d.tableName),
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	output, err := d.client.QueryWithContext(ctx, input)
+	if err != nil {
+		return []entity.Subscription{}, err
+	}
+	subscriptions := []entity.Subscription{}
+	if err := dynamodbattribute.UnmarshalListOfMaps(output.Items, &subscriptions); err != nil {
+		return []entity.Subscription{}, err
+	}
+	if len(subscriptions) == 0 {
+		return []entity.Subscription{}, ErrorSubscriptinEventNotFound
+	}
+	return subscriptions, nil
 }
 
 //DeleteSubscription execute remove the event subscription
@@ -400,7 +431,7 @@ func (d *DynamodbClient) CreateServices(serv dto.ServicesDTO) (string, error) {
 		service := entity.Services{
 			PK:                fmt.Sprintf("SERVICE#%s", serv.Name),
 			SK:                fmt.Sprintf("SERVICE_EVENT#%s", ev),
-			INDEX_AUXILIAR_PK: fmt.Sprintf("SERVICE#%s", serv.ServiceId),
+			INDEX_AUXILIAR_PK: fmt.Sprintf("SERVICE#%s", apiKey),
 			INDEX_AUXILIAR_SK: fmt.Sprintf("SERVICE_EVENT#%s", ev),
 			ApiKey:            apiKey,
 			Name:              serv.Name,
@@ -522,6 +553,39 @@ func (d *DynamodbClient) GetServicesEvents(serviceName, event string) (entity.Se
 	}
 	return services[0], nil
 
+}
+
+//GetClientByApiKey return service by api key
+func (d *DynamodbClient) GetServiceByApiKey(apiKey string) (entity.Services, error) {
+	filt := expression.Key("INDEX_AUXILIAR_PK").Equal(expression.Value(fmt.Sprintf("SERVICE#%s", apiKey)))
+	expr, err := expression.NewBuilder().WithKeyCondition(filt).Build()
+	if err != nil {
+		return entity.Services{}, err
+	}
+
+	input := &dynamodb.QueryInput{
+		IndexName:                 &d.INDEX_AUXILIAR_ASSOCIATION,
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		KeyConditionExpression:    expr.KeyCondition(),
+		TableName:                 aws.String(d.tableName),
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	output, err := d.client.QueryWithContext(ctx, input)
+	if err != nil {
+		return entity.Services{}, err
+	}
+	services := []entity.Services{}
+	if err := dynamodbattribute.UnmarshalListOfMaps(output.Items, &services); err != nil {
+		return entity.Services{}, err
+	}
+	if *output.Count == 0 {
+		return entity.Services{}, ErrorClientNotFound
+	}
+
+	return services[0], nil
 }
 
 //DeleteServices execute remotion of events the services
