@@ -12,7 +12,7 @@ import (
 
 //SqsClient is struct of client sqs
 type SqsClient struct {
-	client   *sqs.SQS
+	Client   *sqs.SQS
 	queueUrl string
 }
 
@@ -34,21 +34,22 @@ func (s *SqsClient) Setup() error {
 		return err
 	}
 	cvc := sqs.New(sess)
-	s.client = cvc
+	s.Client = cvc
 	return nil
 }
 
 //Send is function for execute send message to queue
 func (s *SqsClient) Send(subs dto.SubscriptionDTO, notification dto.NotifierDTO) (interface{}, error) {
-	var body = notification.Payload
+	var body = notification.Data
 	body["topic"] = subs.SubscriptionEvent
 	body["created_at"] = notification.CreatedAt
 
 	sqsMessage := dto.SqsMessage{
-		ClientId:     subs.ClientId,
-		Url:          subs.SubscriptionUrl,
-		AuthProvider: subs.AuthProvider,
-		Body:         body,
+		ClientId:      subs.ClientId,
+		AssociationId: subs.AssociationId,
+		Url:           subs.SubscriptionUrl,
+		AuthProvider:  subs.AuthProvider,
+		Body:          body,
 	}
 	notifyBytes, err := json.Marshal(sqsMessage)
 	if err != nil {
@@ -71,7 +72,7 @@ func (s *SqsClient) Send(subs dto.SubscriptionDTO, notification dto.NotifierDTO)
 		},
 	}
 
-	output, err := s.client.SendMessage(&input)
+	output, err := s.Client.SendMessage(&input)
 	if err != nil {
 		return nil, err
 	}
