@@ -1,10 +1,9 @@
 package consumer
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
 
-	"github.com/aws/aws-sdk-go/service/sqs"
 	"github.com/go-resty/resty/v2"
 	"github.com/mitchellh/mapstructure"
 )
@@ -38,18 +37,12 @@ func (h *NotifyEventHandler) Handle(message ConsumerMessage) (map[string]interfa
 	request := resty.New().R()
 
 	notifyEventMessageBody := h.decodeMessageBody(message)
-	notifyBytes, _ := json.Marshal(notifyEventMessageBody)
-	notifyMessage := string(notifyBytes)
-	sqsMessage := &sqs.Message{
-		Body:          &notifyMessage,
-		ReceiptHandle: &message.ReceiptHandle,
-	}
 
 	if notifyEventMessageBody.Retries > 3 {
 
-		message.removeChannel <- sqsMessage
+		// message.removeChannel <- sqsMessage
 
-		return nil, nil
+		return nil, errors.New("To many retries")
 	}
 
 	// logger.Aggregate("ClientID = ", notifyEventMessageBody.ClientID)
@@ -76,9 +69,9 @@ func (h *NotifyEventHandler) Handle(message ConsumerMessage) (map[string]interfa
 	// if err != nil {
 	// 	fmt.Printf("MessageId: %+v, Retries: %+v\n", message.ReceiptHandle, notifyEventMessageBody.Retries)
 	// 	notifyEventMessageBody.Retries++
-	// 	notifyBytes, _ = json.Marshal(notifyEventMessageBody)
-	// 	notifyMessage = string(notifyBytes)
-	// 	sqsMessage = &sqs.Message{
+	// 	notifyBytes, _ := json.Marshal(notifyEventMessageBody)
+	// 	notifyMessage := string(notifyBytes)
+	// 	sqsMessage := &sqs.Message{
 	// 		Body:          &notifyMessage,
 	// 		ReceiptHandle: &message.ReceiptHandle,
 	// 	}
