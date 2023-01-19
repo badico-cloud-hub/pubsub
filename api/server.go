@@ -9,23 +9,26 @@ import (
 	"strings"
 
 	"github.com/badico-cloud-hub/pubsub/dto"
+	"github.com/badico-cloud-hub/pubsub/entity"
 	"github.com/badico-cloud-hub/pubsub/infra"
 	"github.com/badico-cloud-hub/pubsub/interfaces"
 	"github.com/badico-cloud-hub/pubsub/middlewares"
+	"github.com/badico-cloud-hub/pubsub/setup"
 	"github.com/badico-cloud-hub/pubsub/utils"
 	"github.com/gorilla/mux"
 )
 
 //Server is struct for service api
 type Server struct {
-	port           string
-	mux            *mux.Router
-	routersAdmin   *mux.Router
-	routersAuth    *mux.Router
-	routersNotAuth *mux.Router
-	logger         interfaces.ServiceLogger
-	Dynamo         *infra.DynamodbClient
-	Sqs            *infra.SqsClient
+	port               string
+	mux                *mux.Router
+	routersAdmin       *mux.Router
+	routersAuth        *mux.Router
+	routersServiceAuth *mux.Router
+	routersNotAuth     *mux.Router
+	logger             interfaces.ServiceLogger
+	Dynamo             *infra.DynamodbClient
+	Sqs                *infra.SqsClient
 }
 
 //NewServer return new service api
@@ -38,22 +41,26 @@ func NewServer(port string) *Server {
 	if err := sqs.Setup(); err != nil {
 		log.Fatal(err)
 	}
+	setup.SetupNotifyEventConsumer(sqs.Client)
 	router := mux.NewRouter()
 	adminRouters := router.PathPrefix("/").Subrouter()
 	authRouters := router.PathPrefix("/").Subrouter()
+	authServiceRouters := router.PathPrefix("/").Subrouter()
 	notAuthRouters := router.PathPrefix("/").Subrouter()
 	adminRouters.Use(middlewares.LoggingMiddleware, middlewares.SetupHeadersMiddleware, middlewares.AuthorizeAdminMiddleware)
 	authRouters.Use(middlewares.LoggingMiddleware, middlewares.SetupHeadersMiddleware, middlewares.AuthorizeMiddleware)
+	authServiceRouters.Use(middlewares.LoggingMiddleware, middlewares.SetupHeadersMiddleware, middlewares.AuthorizeMiddlewareByServiceApiKey)
 	notAuthRouters.Use(middlewares.LoggingMiddleware, middlewares.SetupHeadersMiddleware)
 	return &Server{
-		mux:            router,
-		routersAdmin:   adminRouters,
-		routersAuth:    authRouters,
-		routersNotAuth: notAuthRouters,
-		logger:         utils.NewLogger(os.Stdout),
-		port:           port,
-		Dynamo:         dynamo,
-		Sqs:            sqs,
+		mux:                router,
+		routersAdmin:       adminRouters,
+		routersAuth:        authRouters,
+		routersServiceAuth: authServiceRouters,
+		routersNotAuth:     notAuthRouters,
+		logger:             utils.NewLogger(os.Stdout),
+		port:               port,
+		Dynamo:             dynamo,
+		Sqs:                sqs,
 	}
 }
 
@@ -107,8 +114,13 @@ func (s *Server) DeleteSubscription() {
 }
 
 //TestNotification execute the send message to queue
+func (s *Server) Notification() {
+	s.routersServiceAuth.HandleFunc("/notify", s.notification).Methods(http.MethodPost)
+}
+
+//TestNotification by client execute the send message to queue
 func (s *Server) TestNotification() {
-	s.routersAuth.HandleFunc("/subscriptions/test", s.testNotification).Methods(http.MethodPost)
+	s.routersAuth.HandleFunc("/notify/test", s.testNotification).Methods(http.MethodPost)
 }
 
 //CreateServices execute creation of services
@@ -177,7 +189,8 @@ func (s *Server) AllRouters() {
 	s.routersAuth.HandleFunc("/subscriptions", s.createSubscription).Methods(http.MethodPost)
 	s.routersAuth.HandleFunc("/subscriptions", s.listSubscriptions).Methods(http.MethodGet)
 	s.routersAuth.HandleFunc("/subscriptions/{id}", s.deleteSubscription).Methods(http.MethodDelete)
-	s.routersAuth.HandleFunc("/subscriptions/test", s.testNotification).Methods(http.MethodPost)
+	s.routersServiceAuth.HandleFunc("/notify", s.notification).Methods(http.MethodPost)
+	s.routersAuth.HandleFunc("/notify/test", s.testNotification).Methods(http.MethodPost)
 
 }
 
@@ -640,21 +653,103 @@ func (s *Server) deleteClients(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func (s *Server) notification(w http.ResponseWriter, r *http.Request) {
+	notif := dto.NotifierDTO{}
+	defer r.Body.Close()
+	if err := json.NewDecoder(r.Body).Decode(&notif); err != nil {
+		s.logger.Error(err.Error())
+		return
+	}
+
+	respNotSubscriptions := dto.ResponseNotifyDTO{
+		Ok:     false,
+		Topic:  notif.Event,
+		SentTo: []dto.SubscriptionDTO{},
+	}
+
+	subscriptions := []entity.Subscription{}
+	subscriptionsFiltered := []dto.SubscriptionDTO{}
+
+	for _, associationId := range notif.AssociationsId {
+		newSubsciptions, err := s.Dynamo.GetSubscriptionByAssociationIdAndEvent(associationId, notif.Event)
+		if err != nil && err == infra.ErrorSubscriptinEventNotFound {
+			w.WriteHeader(http.StatusNotFound)
+			if err := json.NewEncoder(w).Encode(&respNotSubscriptions); err != nil {
+				s.logger.Error(err.Error())
+				return
+			}
+			return
+		}
+
+		if err != nil {
+			s.logger.Error(err.Error())
+			return
+		}
+
+		subscriptions = append(subscriptions, newSubsciptions...)
+	}
+
+	for _, subscription := range subscriptions {
+		if duplicated := utils.VerifyIfUrlIsDuplicated(subscriptionsFiltered, subscription.SubscriptionUrl, subscription.SubscriptionEvent); !duplicated {
+			subscriptionsFiltered = append(subscriptionsFiltered, dto.SubscriptionDTO{
+				AssociationId:     subscription.AssociationId,
+				ClientId:          subscription.ClientId,
+				AuthProvider:      "",
+				Url:               subscription.SubscriptionUrl,
+				SubscriptionEvent: subscription.SubscriptionEvent,
+				CreatedAt:         notif.CreatedAt,
+			})
+		}
+	}
+
+	for _, subscription := range subscriptionsFiltered {
+		_, err := s.Sqs.Send(subscription, notif)
+		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
+			if err := json.NewEncoder(w).Encode(&respNotSubscriptions); err != nil {
+				s.logger.Error(err.Error())
+				return
+			}
+			s.logger.Error(err.Error())
+			return
+		}
+	}
+
+	respNotSubscriptions = dto.ResponseNotifyDTO{
+		Ok:     true,
+		Topic:  notif.Event,
+		SentTo: subscriptionsFiltered,
+	}
+
+	if err := json.NewEncoder(w).Encode(&respNotSubscriptions); err != nil {
+		s.logger.Error(err.Error())
+		return
+	}
+	return
+
+}
+
 func (s *Server) testNotification(w http.ResponseWriter, r *http.Request) {
 	notif := dto.NotifierDTO{
-		ClientId: r.Header.Get("client-id"),
+		ClientId:       r.Header.Get("client-id"),
+		AssociationsId: []string{r.Header.Get("association-id")},
 	}
 	defer r.Body.Close()
 	if err := json.NewDecoder(r.Body).Decode(&notif); err != nil {
 		s.logger.Error(err.Error())
 		return
 	}
+
 	respNotSubscriptions := dto.ResponseNotifyDTO{
 		Ok:     false,
 		Topic:  notif.Event,
 		SentTo: []dto.SubscriptionDTO{},
 	}
-	subscription, err := s.Dynamo.GetSubscription(notif.ClientId, notif.Event)
+
+	subscriptionsFiltered := []dto.SubscriptionDTO{}
+	associationId := notif.AssociationsId[0]
+	subscriptions, err := s.Dynamo.GetSubscriptionByAssociationIdAndEvent(associationId, notif.Event)
+
 	if err != nil && err == infra.ErrorSubscriptinEventNotFound {
 		w.WriteHeader(http.StatusNotFound)
 		if err := json.NewEncoder(w).Encode(&respNotSubscriptions); err != nil {
@@ -668,43 +763,43 @@ func (s *Server) testNotification(w http.ResponseWriter, r *http.Request) {
 		s.logger.Error(err.Error())
 		return
 	}
-	if subscription.SubscriptionEvent == notif.Event && subscription.ClientId == notif.ClientId {
-		subs := dto.SubscriptionDTO{
-			ClientId:          subscription.ClientId,
-			AuthProvider:      "",
-			Url:               subscription.SubscriptionUrl,
-			SubscriptionEvent: subscription.SubscriptionEvent,
-			CreatedAt:         notif.CreatedAt,
-		}
-		_, err := s.Sqs.Send(subs, notif)
-		if err != nil {
-			s.logger.Error(err.Error())
-			return
-		}
-		responseNotify := dto.ResponseNotifyDTO{
-			Ok:    true,
-			Topic: subscription.SubscriptionEvent,
-			SentTo: []dto.SubscriptionDTO{
-				{
-					ClientId:          subscription.ClientId,
-					SubscriptionId:    subscription.SubscriptionId,
-					SubscriptionEvent: subscription.SubscriptionEvent,
-					SubscriptionUrl:   subscription.SubscriptionUrl,
-				},
-			},
-		}
 
-		if err := json.NewEncoder(w).Encode(&responseNotify); err != nil {
-			s.logger.Error(err.Error())
-			return
+	for _, subscription := range subscriptions {
+		if duplicated := utils.VerifyIfUrlIsDuplicated(subscriptionsFiltered, subscription.SubscriptionUrl, subscription.SubscriptionEvent); !duplicated {
+			subscriptionsFiltered = append(subscriptionsFiltered, dto.SubscriptionDTO{
+				AssociationId:     associationId,
+				ClientId:          subscription.ClientId,
+				AuthProvider:      "",
+				Url:               subscription.SubscriptionUrl,
+				SubscriptionEvent: subscription.SubscriptionEvent,
+				CreatedAt:         notif.CreatedAt,
+			})
 		}
-		return
-	} else {
-		w.WriteHeader(http.StatusNotFound)
-		if err := json.NewEncoder(w).Encode(&respNotSubscriptions); err != nil {
+	}
+
+	for _, subscription := range subscriptionsFiltered {
+		_, err := s.Sqs.Send(subscription, notif)
+		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
+			if err := json.NewEncoder(w).Encode(&respNotSubscriptions); err != nil {
+				s.logger.Error(err.Error())
+				return
+			}
 			s.logger.Error(err.Error())
 			return
 		}
 	}
+
+	respNotSubscriptions = dto.ResponseNotifyDTO{
+		Ok:     true,
+		Topic:  notif.Event,
+		SentTo: subscriptionsFiltered,
+	}
+
+	if err := json.NewEncoder(w).Encode(&respNotSubscriptions); err != nil {
+		s.logger.Error(err.Error())
+		return
+	}
+	return
 
 }
