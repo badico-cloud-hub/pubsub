@@ -61,6 +61,35 @@ func AuthorizeMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+//AuthorizeMiddleware is middleware to authorize routers by service API KEY
+func AuthorizeMiddlewareByServiceApiKey(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logger := utils.NewLogger(os.Stdout)
+		dynamo := infra.NewDynamodbClient()
+		if err := dynamo.Setup(); err != nil {
+			log.Fatal(err)
+		}
+		headerApiKey := r.Header.Get("api-key")
+		if headerApiKey != "" {
+			_, err := dynamo.GetServiceByApiKey(headerApiKey)
+			if err != nil {
+				w.WriteHeader(http.StatusForbidden)
+				if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "Not Authorized"}); err != nil {
+					logger.Error(err.Error())
+				}
+				return
+			}
+			next.ServeHTTP(w, r)
+		} else {
+			w.WriteHeader(http.StatusForbidden)
+			if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "Not Authorized"}); err != nil {
+				logger.Error(err.Error())
+				return
+			}
+		}
+	})
+}
+
 //AuthorizeAdminMiddleware is middleware to authorize admin routers
 func AuthorizeAdminMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
