@@ -15,3 +15,12 @@ func FilterEvents(events []string) []string {
 	}
 	return newEvents
 }
+
+func VerifyIfUrlIsDuplicated(elems []dto.SubscriptionDTO, url, event string) bool {
+	for _, s := range elems {
+		if url == s.SubscriptionUrl && event == s.SubscriptionEvent {
+			return true
+		}
+	}
+	return false
+}
