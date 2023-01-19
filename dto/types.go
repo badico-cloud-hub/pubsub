@@ -15,10 +15,11 @@ type ResponseNotifyDTO struct {
 
 //SqsMessage is struct of message to sqs
 type SqsMessage struct {
-	ClientId     string                 `json:"client_id"`
-	Url          string                 `json:"url"`
-	AuthProvider string                 `json:"auth_provider,omitempty"`
-	Body         map[string]interface{} `json:"body"`
+	ClientId      string                 `json:"client_id"`
+	Url           string                 `json:"url"`
+	AuthProvider  string                 `json:"auth_provider,omitempty"`
+	AssociationId string                 `json:"association_id,omitempty"`
+	Body          map[string]interface{} `json:"body"`
 }
 
 //SubscriptionDTO is struct for dto the subscription
@@ -36,11 +37,12 @@ type SubscriptionDTO struct {
 
 //NotifierDTO is struct for dto the notify
 type NotifierDTO struct {
-	ClientId  string                 `json:"client_id,omitempty"`
-	Event     string                 `json:"event,omitempty"`
-	Url       string                 `json:"url,omitempty"`
-	Payload   map[string]interface{} `json:"payload,omitempty"`
-	CreatedAt string                 `json:"createdAt,omitempty"`
+	ClientId       string                 `json:"client_id,omitempty"`
+	Event          string                 `json:"event,omitempty"`
+	Url            string                 `json:"url,omitempty"`
+	Data           map[string]interface{} `json:"data,omitempty"`
+	AssociationsId []string               `json:"associations_id,omitempty"`
+	CreatedAt      string                 `json:"createdAt,omitempty"`
 }
 
 //ServiceDTO is struct for dto the service
