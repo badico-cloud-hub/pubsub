@@ -44,7 +44,7 @@ func (s *SqsClient) Send(subs dto.SubscriptionDTO, notification dto.NotifierDTO)
 	body["topic"] = subs.SubscriptionEvent
 	body["created_at"] = notification.CreatedAt
 
-	sqsMessage := dto.SqsMessage{
+	sqsMessage := dto.QueueMessage{
 		ClientId:      subs.ClientId,
 		AssociationId: subs.AssociationId,
 		Url:           subs.SubscriptionUrl,
