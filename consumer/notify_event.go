@@ -5,17 +5,17 @@ import (
 	"fmt"
 
 	"github.com/go-resty/resty/v2"
-	"github.com/mitchellh/mapstructure"
 )
 
 type NotifyEventHandler struct {
+	// logManager *producer.LoggerManager
 }
 
 type NotifyEventMessageBody struct {
 	URL           string                 `json:"url"`
 	ClientID      string                 `json:"client_id"`
 	AssociationId string                 `json:"association_id"`
-	Retries       int64                  `json:"retries"`
+	Retries       int                    `json:"retries"`
 	AuthProvider  string                 `json:"auth_provider"`
 	Body          map[string]interface{} `json:"body"`
 }
@@ -26,31 +26,26 @@ func NewNotifyEventHandler() *NotifyEventHandler {
 }
 
 func (h *NotifyEventHandler) Handle(message ConsumerMessage) (map[string]interface{}, error) {
-	// logger := infra.NewLogAggregator("Notify Event")
-	fmt.Println("START")
-	// logger.Aggregate("START")
-	// defer func() {
-	// 	logger.Aggregate("END")
-	// 	logger.Log()
-	// }()
+	// handleLog := h.logManager.NewLogger("logger handle function- ", os.Getenv("MACHINE_IP"))
+	// handleLog.AddTraceRef(fmt.Sprintf("MessageId: %s", message.ReceiptHandle))
+	// handleLog.Infoln("START")
+	retriesNumber := 3
+	defer func() {
+		// handleLog.Infoln("END")
+	}()
 
 	request := resty.New().R()
 
-	notifyEventMessageBody := h.decodeMessageBody(message)
-
-	if notifyEventMessageBody.Retries > 3 {
-
-		// message.removeChannel <- sqsMessage
-
+	if message.QueueMessage.Retries > retriesNumber {
 		return nil, errors.New("To many retries")
 	}
 
-	// logger.Aggregate("ClientID = ", notifyEventMessageBody.ClientID)
-	// logger.Aggregate("URL = ", notifyEventMessageBody.URL)
-	// logger.Aggregate("EventName = ", notifyEventMessageBody.Body["topic"])
-	// logger.Aggregate("CreatedAt = ", notifyEventMessageBody.Body["created_at"])
+	// handleLog.AddTraceRef(fmt.Sprintf("ClientID = %s", notifyEventMessageBody.ClientID))
+	// handleLog.AddTraceRef(fmt.Sprintf("URL = %s", notifyEventMessageBody.URL))
+	// handleLog.AddTraceRef(fmt.Sprintf("EventName = %s", notifyEventMessageBody.Body["topic"]))
+	// handleLog.AddTraceRef(fmt.Sprintf("CreatedAt = %s", notifyEventMessageBody.Body["created_at"]))
 
-	if notifyEventMessageBody.AuthProvider != "" {
+	if message.QueueMessage.AuthProvider != "" {
 		// authProvider, _ := h.getAuthProvider(notifyEventMessageBody.AuthProvider)
 
 		// token, ok := authProvider.Authenticate(notifyEventMessageBody.ClientID)
@@ -63,42 +58,19 @@ func (h *NotifyEventHandler) Handle(message ConsumerMessage) (map[string]interfa
 		request.SetHeader("token", "token")
 	}
 
-	// logger.Aggregate("Making Request...")
-	// _, err := request.SetBody(notifyEventMessageBody.Body).Post(notifyEventMessageBody.URL)
+	// handleLog.Infoln("Making Request...")
+	fmt.Printf("QueueMessage: %+v\n", *message.QueueMessage)
+	resp, err := request.SetBody(message.QueueMessage.Body).Post(message.QueueMessage.Url)
 
-	// if err != nil {
-	// 	fmt.Printf("MessageId: %+v, Retries: %+v\n", message.ReceiptHandle, notifyEventMessageBody.Retries)
-	// 	notifyEventMessageBody.Retries++
-	// 	notifyBytes, _ := json.Marshal(notifyEventMessageBody)
-	// 	notifyMessage := string(notifyBytes)
-	// 	sqsMessage := &sqs.Message{
-	// 		Body:          &notifyMessage,
-	// 		ReceiptHandle: &message.ReceiptHandle,
-	// 	}
-	// 	message.handleChannel <- sqsMessage
-	// 	return nil, nil
-	// }
+	if err != nil || resp.StatusCode() < 200 || resp.StatusCode() > 299 {
+		fmt.Printf("ClientId: %+v, Retries: %+v\n", message.QueueMessage.ClientId, message.QueueMessage.Retries)
+		message.QueueMessage.Retries++
+		message.handleChannel <- message.QueueMessage
+		return nil, nil
+	}
 
-	// if err != nil {
-	// 	// logger.Aggregate("Error = ", err.Error())
-	// 	return nil, nil
-	// }
-
-	// logger.Aggregate("StatusCode = ", resp.StatusCode())
+	// handleLog.Infof("StatusCode = %s", resp.StatusCode())
+	fmt.Println("StatusCode = ", resp.StatusCode())
 
 	return nil, nil
-}
-
-func (h *NotifyEventHandler) decodeMessageBody(message ConsumerMessage) NotifyEventMessageBody {
-	var notifyEventMessageBody NotifyEventMessageBody
-
-	decoder, _ := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-		Metadata: nil,
-		Result:   &notifyEventMessageBody,
-		TagName:  "json",
-	})
-
-	decoder.Decode(message.Body)
-
-	return notifyEventMessageBody
 }
