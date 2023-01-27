@@ -13,12 +13,13 @@ type ResponseNotifyDTO struct {
 	SentTo []SubscriptionDTO `json:"sent_to"`
 }
 
-//SqsMessage is struct of message to sqs
-type SqsMessage struct {
+//QueueMessage is struct of message to sqs
+type QueueMessage struct {
 	ClientId      string                 `json:"client_id"`
 	Url           string                 `json:"url"`
 	AuthProvider  string                 `json:"auth_provider,omitempty"`
 	AssociationId string                 `json:"association_id,omitempty"`
+	Retries       int                    `json:"retries,omitempty"`
 	Body          map[string]interface{} `json:"body"`
 }
 
