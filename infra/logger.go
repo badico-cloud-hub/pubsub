@@ -18,11 +18,9 @@ func NewLogManager() *producer.LoggerManager {
 	})
 
 	err := logManager.Setup(
-		"us-east-2",
-		os.Getenv("LOG_ACCESS_KEY_ID"),
 		os.Getenv("LOG_ACCESS_KEY"),
-		os.Getenv("LOG_MESSAGE_QUEUE_URL"),
-		os.Getenv("LOG_EVENT_QUEUE_URL"),
+		os.Getenv("LOG_ACCESS_KEY_ID"),
+		os.Getenv("LOG_QUEUE_URL"),
 	)
 
 	if err != nil {
