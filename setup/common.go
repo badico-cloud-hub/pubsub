@@ -7,23 +7,18 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/service/sqs"
+	"github.com/badico-cloud-hub/log-driver/producer"
 	"github.com/badico-cloud-hub/pubsub/consumer"
 )
 
-func SetupNotifyEventConsumer(sqs *sqs.SQS, wg *sync.WaitGroup) {
+func SetupNotifyEventConsumer(sqs *sqs.SQS, wg *sync.WaitGroup, logManager *producer.LoggerManager) {
 	queueUrl := os.Getenv("NOTIFY_SUBSCRIBERS_QUEUE_URL")
 	dlq := os.Getenv("NOTIFY_SUBSCRIBERS_QUEUE_URL_DLQ")
 	interval := 100 * time.Millisecond
 
-	// logManager := infra.NewLogManager()
-	// logManager.StartProducer()
-	// defer func() {
-	// logManager.StopProducer()
-	// }()
+	setupLog := logManager.NewLogger("logger setup notify event consumer - ", os.Getenv("MACHINE_IP"))
 
-	// setupLog := logManager.NewLogger("logger setup notify event consumer - ", os.Getenv("MACHINE_IP"))
-
-	consumer, err := consumer.NewSQSConsumer(queueUrl, dlq, sqs, consumer.NewNotifyEventHandler(), 10, interval)
+	consumer, err := consumer.NewSQSConsumer(queueUrl, dlq, sqs, consumer.NewNotifyEventHandler(logManager), 10, interval, logManager)
 
 	if err != nil {
 		fmt.Println(err)
@@ -31,5 +26,5 @@ func SetupNotifyEventConsumer(sqs *sqs.SQS, wg *sync.WaitGroup) {
 
 	consumer.Init(wg)
 
-	// setupLog.Infoln("Running NotifyEventConsumer")
+	setupLog.Infoln("Running NotifyEventConsumer")
 }
