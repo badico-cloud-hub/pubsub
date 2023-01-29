@@ -26,7 +26,7 @@ type Server struct {
 	routersAuth        *mux.Router
 	routersServiceAuth *mux.Router
 	routersNotAuth     *mux.Router
-	logManager         *producer.LoggerManager
+	LogManager         *producer.LoggerManager
 	Dynamo             *infra.DynamodbClient
 	Sqs                *infra.SqsClient
 	RabbitMQClient     *infra.RabbitMQ
@@ -47,11 +47,7 @@ func NewServer(port string) *Server {
 	if err := rabbitMqClient.Setup(); err != nil {
 		log.Fatal(err)
 	}
-	logManager := infra.NewLogManager()
-	logManager.StartProducer()
-	defer func() {
-		logManager.StopProducer()
-	}()
+
 	router := mux.NewRouter()
 	adminRouters := router.PathPrefix("/").Subrouter()
 	authRouters := router.PathPrefix("/").Subrouter()
@@ -67,7 +63,6 @@ func NewServer(port string) *Server {
 		routersAuth:        authRouters,
 		routersServiceAuth: authServiceRouters,
 		routersNotAuth:     notAuthRouters,
-		logManager:         logManager,
 		port:               port,
 		Dynamo:             dynamo,
 		Sqs:                sqs,
@@ -77,7 +72,7 @@ func NewServer(port string) *Server {
 
 //Run execute router and listen the server
 func (s *Server) Run() error {
-	runLog := s.logManager.NewLogger("logger run application - ", os.Getenv("MACHINE_IP"))
+	runLog := s.LogManager.NewLogger("logger run application - ", os.Getenv("MACHINE_IP"))
 	runLog.Infof("Listen in port %v", s.port)
 	if err := s.setup(); err != nil {
 		return err
@@ -207,7 +202,7 @@ func (s *Server) AllRouters() {
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
-	healthLog := s.logManager.NewLogger("logger health route - ", os.Getenv("MACHINE_IP"))
+	healthLog := s.LogManager.NewLogger("logger health route - ", os.Getenv("MACHINE_IP"))
 
 	err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "ok"})
 	if err != nil {
@@ -216,7 +211,7 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) createSubscription(w http.ResponseWriter, r *http.Request) {
-	createSubscriptionLog := s.logManager.NewLogger("logger create subscription route - ", os.Getenv("MACHINE_IP"))
+	createSubscriptionLog := s.LogManager.NewLogger("logger create subscription route - ", os.Getenv("MACHINE_IP"))
 	subs := dto.SubscriptionDTO{
 		ClientId:      r.Header.Get("client-id"),
 		AssociationId: r.Header.Get("association-id"),
@@ -247,7 +242,7 @@ func (s *Server) createSubscription(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listSubscriptions(w http.ResponseWriter, r *http.Request) {
-	listSubscriptionsLog := s.logManager.NewLogger("logger list subscriptions route - ", os.Getenv("MACHINE_IP"))
+	listSubscriptionsLog := s.LogManager.NewLogger("logger list subscriptions route - ", os.Getenv("MACHINE_IP"))
 	associationId := r.Header.Get("association-id")
 	listSubscriptionsLog.AddTraceRef(fmt.Sprintf("AssociationId: %s", associationId))
 	resultSubs, err := s.Dynamo.ListSubscriptions(associationId)
@@ -264,7 +259,7 @@ func (s *Server) listSubscriptions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteSubscription(w http.ResponseWriter, r *http.Request) {
-	deleteSubscriptionLog := s.logManager.NewLogger("logger delete subscription route - ", os.Getenv("MACHINE_IP"))
+	deleteSubscriptionLog := s.LogManager.NewLogger("logger delete subscription route - ", os.Getenv("MACHINE_IP"))
 	id := mux.Vars(r)["id"]
 	associationId := r.Header.Get("association-id")
 	clientId := r.Header.Get("client-id")
@@ -316,7 +311,7 @@ func (s *Server) deleteSubscription(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) createServices(w http.ResponseWriter, r *http.Request) {
-	createServiceLog := s.logManager.NewLogger("logger create service route - ", os.Getenv("MACHINE_IP"))
+	createServiceLog := s.LogManager.NewLogger("logger create service route - ", os.Getenv("MACHINE_IP"))
 	serviceDto := dto.ServicesDTO{}
 	defer r.Body.Close()
 	if err := json.NewDecoder(r.Body).Decode(&serviceDto); err != nil {
@@ -363,7 +358,7 @@ func (s *Server) createServices(w http.ResponseWriter, r *http.Request) {
 
 }
 func (s *Server) getServices(w http.ResponseWriter, r *http.Request) {
-	getServicesLog := s.logManager.NewLogger("logger get service route - ", os.Getenv("MACHINE_IP"))
+	getServicesLog := s.LogManager.NewLogger("logger get service route - ", os.Getenv("MACHINE_IP"))
 	service := mux.Vars(r)["service"]
 	getServicesLog.AddTraceRef(fmt.Sprintf("Service: %s", service))
 	serviceEvents, err := s.Dynamo.GetServices(service)
@@ -402,7 +397,7 @@ func (s *Server) getServices(w http.ResponseWriter, r *http.Request) {
 func (s *Server) getServicesEvents(w http.ResponseWriter, r *http.Request) {
 	service := mux.Vars(r)["service"]
 	event := r.URL.Query().Get("name")
-	getServiceEventsLog := s.logManager.NewLogger("logger get service events route - ", os.Getenv("MACHINE_IP"))
+	getServiceEventsLog := s.LogManager.NewLogger("logger get service events route - ", os.Getenv("MACHINE_IP"))
 	getServiceEventsLog.AddTraceRef(fmt.Sprintf("Service: %s", service))
 	getServiceEventsLog.AddTraceRef(fmt.Sprintf("Event: %s", event))
 	serviceEvent, err := s.Dynamo.GetServicesEvents(service, event)
@@ -428,7 +423,7 @@ func (s *Server) getServicesEvents(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listServices(w http.ResponseWriter, r *http.Request) {
-	listServiceLog := s.logManager.NewLogger("logger list services route - ", os.Getenv("MACHINE_IP"))
+	listServiceLog := s.LogManager.NewLogger("logger list services route - ", os.Getenv("MACHINE_IP"))
 	services, err := s.Dynamo.ListServices()
 	if err != nil {
 		listServiceLog.Errorln(err.Error())
@@ -460,7 +455,7 @@ func (s *Server) listServices(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteServices(w http.ResponseWriter, r *http.Request) {
-	deleteServiceLog := s.logManager.NewLogger("logger delete service route - ", os.Getenv("MACHINE_IP"))
+	deleteServiceLog := s.LogManager.NewLogger("logger delete service route - ", os.Getenv("MACHINE_IP"))
 	service := mux.Vars(r)["service"]
 	eventParam := r.URL.Query().Get("event")
 	deleteServiceLog.AddTraceRef(fmt.Sprintf("Service: %s", service))
@@ -499,7 +494,7 @@ func (s *Server) deleteServices(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) addEvent(w http.ResponseWriter, r *http.Request) {
-	addEventServiceLog := s.logManager.NewLogger("logger add event in service route - ", os.Getenv("MACHINE_IP"))
+	addEventServiceLog := s.LogManager.NewLogger("logger add event in service route - ", os.Getenv("MACHINE_IP"))
 	service := mux.Vars(r)["service"]
 	addEventServiceLog.AddTraceRef(fmt.Sprintf("Service: %s", service))
 	defer r.Body.Close()
@@ -569,7 +564,7 @@ func (s *Server) addEvent(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) createClients(w http.ResponseWriter, r *http.Request) {
-	createClientLog := s.logManager.NewLogger("logger create client route - ", os.Getenv("MACHINE_IP"))
+	createClientLog := s.LogManager.NewLogger("logger create client route - ", os.Getenv("MACHINE_IP"))
 	client := dto.ClientDTO{}
 	defer r.Body.Close()
 	if err := json.NewDecoder(r.Body).Decode(&client); err != nil {
@@ -624,7 +619,7 @@ func (s *Server) createClients(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getClients(w http.ResponseWriter, r *http.Request) {
-	listClientsServiceLog := s.logManager.NewLogger("logger list clients service route - ", os.Getenv("MACHINE_IP"))
+	listClientsServiceLog := s.LogManager.NewLogger("logger list clients service route - ", os.Getenv("MACHINE_IP"))
 	service := mux.Vars(r)["service"]
 	identifier := r.URL.Query().Get("identifier")
 	listClientsServiceLog.AddTraceRef(fmt.Sprintf("Service: %s", service))
@@ -685,7 +680,7 @@ func (s *Server) getClients(w http.ResponseWriter, r *http.Request) {
 	}
 }
 func (s *Server) listClients(w http.ResponseWriter, r *http.Request) {
-	listClientsLog := s.logManager.NewLogger("logger list clients route - ", os.Getenv("MACHINE_IP"))
+	listClientsLog := s.LogManager.NewLogger("logger list clients route - ", os.Getenv("MACHINE_IP"))
 	clients, err := s.Dynamo.ListClients()
 	if err != nil {
 		listClientsLog.Errorln(err.Error())
@@ -711,7 +706,7 @@ func (s *Server) listClients(w http.ResponseWriter, r *http.Request) {
 	}
 }
 func (s *Server) deleteClients(w http.ResponseWriter, r *http.Request) {
-	deleteClientLog := s.logManager.NewLogger("logger delete client route - ", os.Getenv("MACHINE_IP"))
+	deleteClientLog := s.LogManager.NewLogger("logger delete client route - ", os.Getenv("MACHINE_IP"))
 	service := mux.Vars(r)["service"]
 	association_id := mux.Vars(r)["association_id"]
 	deleteClientLog.AddTraceRef(fmt.Sprintf("Service: %s", service))
@@ -744,7 +739,7 @@ func (s *Server) deleteClients(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) notification(w http.ResponseWriter, r *http.Request) {
-	notificationLog := s.logManager.NewLogger("logger notification route - ", os.Getenv("MACHINE_IP"))
+	notificationLog := s.LogManager.NewLogger("logger notification route - ", os.Getenv("MACHINE_IP"))
 	notif := dto.NotifierDTO{}
 	defer r.Body.Close()
 	if err := json.NewDecoder(r.Body).Decode(&notif); err != nil {
@@ -833,7 +828,7 @@ func (s *Server) notification(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) testNotification(w http.ResponseWriter, r *http.Request) {
-	testNotificationLog := s.logManager.NewLogger("logger test notification route - ", os.Getenv("MACHINE_IP"))
+	testNotificationLog := s.LogManager.NewLogger("logger test notification route - ", os.Getenv("MACHINE_IP"))
 	notif := dto.NotifierDTO{
 		ClientId:       r.Header.Get("client-id"),
 		AssociationsId: []string{r.Header.Get("association-id")},
