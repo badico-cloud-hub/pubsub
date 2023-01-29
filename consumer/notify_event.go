@@ -3,12 +3,14 @@ package consumer
 import (
 	"errors"
 	"fmt"
+	"os"
 
+	"github.com/badico-cloud-hub/log-driver/producer"
 	"github.com/go-resty/resty/v2"
 )
 
 type NotifyEventHandler struct {
-	// logManager *producer.LoggerManager
+	logManager *producer.LoggerManager
 }
 
 type NotifyEventMessageBody struct {
@@ -20,18 +22,19 @@ type NotifyEventMessageBody struct {
 	Body          map[string]interface{} `json:"body"`
 }
 
-func NewNotifyEventHandler() *NotifyEventHandler {
+func NewNotifyEventHandler(logManager *producer.LoggerManager) *NotifyEventHandler {
 
-	return &NotifyEventHandler{}
+	return &NotifyEventHandler{
+		logManager,
+	}
 }
 
 func (h *NotifyEventHandler) Handle(message ConsumerMessage) (map[string]interface{}, error) {
-	// handleLog := h.logManager.NewLogger("logger handle function- ", os.Getenv("MACHINE_IP"))
-	// handleLog.AddTraceRef(fmt.Sprintf("MessageId: %s", message.ReceiptHandle))
-	// handleLog.Infoln("START")
+	handleLog := h.logManager.NewLogger("logger handle function- ", os.Getenv("MACHINE_IP"))
+	handleLog.Infoln("START")
 	retriesNumber := 3
 	defer func() {
-		// handleLog.Infoln("END")
+		handleLog.Infoln("END")
 	}()
 
 	request := resty.New().R()
@@ -40,10 +43,10 @@ func (h *NotifyEventHandler) Handle(message ConsumerMessage) (map[string]interfa
 		return nil, errors.New("To many retries")
 	}
 
-	// handleLog.AddTraceRef(fmt.Sprintf("ClientID = %s", notifyEventMessageBody.ClientID))
-	// handleLog.AddTraceRef(fmt.Sprintf("URL = %s", notifyEventMessageBody.URL))
-	// handleLog.AddTraceRef(fmt.Sprintf("EventName = %s", notifyEventMessageBody.Body["topic"]))
-	// handleLog.AddTraceRef(fmt.Sprintf("CreatedAt = %s", notifyEventMessageBody.Body["created_at"]))
+	handleLog.AddTraceRef(fmt.Sprintf("ClientID = %s", message.QueueMessage.ClientId))
+	handleLog.AddTraceRef(fmt.Sprintf("URL = %s", message.QueueMessage.Url))
+	handleLog.AddTraceRef(fmt.Sprintf("EventName = %s", message.QueueMessage.Body["topic"]))
+	handleLog.AddTraceRef(fmt.Sprintf("CreatedAt = %s", message.QueueMessage.Body["created_at"]))
 
 	if message.QueueMessage.AuthProvider != "" {
 		// authProvider, _ := h.getAuthProvider(notifyEventMessageBody.AuthProvider)
@@ -58,7 +61,7 @@ func (h *NotifyEventHandler) Handle(message ConsumerMessage) (map[string]interfa
 		request.SetHeader("token", "token")
 	}
 
-	// handleLog.Infoln("Making Request...")
+	handleLog.Infoln("Making Request...")
 	fmt.Printf("QueueMessage: %+v\n", *message.QueueMessage)
 	resp, err := request.SetBody(message.QueueMessage.Body).Post(message.QueueMessage.Url)
 
@@ -69,7 +72,7 @@ func (h *NotifyEventHandler) Handle(message ConsumerMessage) (map[string]interfa
 		return nil, nil
 	}
 
-	// handleLog.Infof("StatusCode = %s", resp.StatusCode())
+	handleLog.Infof("StatusCode = %s", resp.StatusCode())
 	fmt.Println("StatusCode = ", resp.StatusCode())
 
 	return nil, nil
