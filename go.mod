@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/aws/aws-sdk-go v1.44.180
-	github.com/badico-cloud-hub/log-driver v0.0.0-20230125102915-e756a4a5f382
+	github.com/badico-cloud-hub/log-driver v0.0.0-20230127141250-9d8604c5ce5c
 	github.com/go-resty/resty/v2 v2.7.0
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0

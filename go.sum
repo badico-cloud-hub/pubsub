@@ -4,6 +4,8 @@ github.com/badico-cloud-hub/log-driver v0.0.0-20230124144209-6a400e991f61 h1:W9w
 github.com/badico-cloud-hub/log-driver v0.0.0-20230124144209-6a400e991f61/go.mod h1:KWpmLUrTjWnJDWtEYPxoK6WvTB+TJE0H+HALLzptBXw=
 github.com/badico-cloud-hub/log-driver v0.0.0-20230125102915-e756a4a5f382 h1:CObc47Bk7KZTH/S0IyMWdo5Dq9ZdOi34PS/R8uDL6vw=
 github.com/badico-cloud-hub/log-driver v0.0.0-20230125102915-e756a4a5f382/go.mod h1:KWpmLUrTjWnJDWtEYPxoK6WvTB+TJE0H+HALLzptBXw=
+github.com/badico-cloud-hub/log-driver v0.0.0-20230127141250-9d8604c5ce5c h1:0ncD2JYk9DeLBESl8p7w8BI9GRgbFWUbuSpM28dA57U=
+github.com/badico-cloud-hub/log-driver v0.0.0-20230127141250-9d8604c5ce5c/go.mod h1:GZ4XU6JRDw1hmeSMXhLCTJD6ts8xdqtevbwxJDFODtI=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
