@@ -22,9 +22,16 @@ func main() {
 		log.Fatal(err)
 	}
 
+	logManager := infra.NewLogManager()
+	logManager.StartProducer()
+	defer func() {
+		logManager.StopProducer()
+	}()
+
 	if isServer {
 		port := os.Getenv("PORT")
 		api := api.NewServer(port)
+		api.LogManager = logManager
 		api.AllRouters()
 		if err := api.Run(); err != nil {
 			log.Fatal(err)
@@ -35,7 +42,8 @@ func main() {
 		if err := sqs.Setup(); err != nil {
 			log.Fatal(err)
 		}
-		setup.SetupNotifyEventConsumer(sqs.Client, wg)
+
+		setup.SetupNotifyEventConsumer(sqs.Client, wg, logManager)
 		wg.Wait()
 	}
 
