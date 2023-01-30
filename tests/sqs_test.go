@@ -43,7 +43,7 @@ func TestSendSqs(t *testing.T) {
 		SubscriptionEvent: "batch-item.pix.paid",
 	}
 	notif := dto.NotifierDTO{
-		Payload: map[string]interface{}{
+		Data: map[string]interface{}{
 			"invoice": "invoice.paid",
 		},
 		CreatedAt: time.Now().UTC().String(),

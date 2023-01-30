@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -20,16 +21,18 @@ import (
 
 //DynamodbClient is struct for client dynamodb
 type DynamodbClient struct {
-	logger    interfaces.ServiceLogger
-	client    *dynamodb.DynamoDB
-	tableName string
+	logger                     interfaces.ServiceLogger
+	client                     *dynamodb.DynamoDB
+	tableName                  string
+	INDEX_AUXILIAR_ASSOCIATION string
 }
 
 //NewDynamodbClient return new client dynamodb
 func NewDynamodbClient() *DynamodbClient {
 	return &DynamodbClient{
-		logger:    utils.NewLogger(os.Stdout),
-		tableName: os.Getenv("DYNAMO_TABLE_NAME"),
+		logger:                     utils.NewLogger(os.Stdout),
+		tableName:                  os.Getenv("DYNAMO_TABLE_NAME"),
+		INDEX_AUXILIAR_ASSOCIATION: "INDEX_AUXILIAR_ASSOCIATION",
 	}
 }
 
@@ -57,10 +60,10 @@ func (d *DynamodbClient) CreateSubscription(subs *dto.SubscriptionDTO) (dto.Subs
 
 		for _, event := range subs.Events {
 			subscription := entity.Subscription{}
-			subscription.PK = fmt.Sprintf("SUBSCRIPTION#%s", id.String())
+			subscription.PK = fmt.Sprintf("SUBSCRIPTION#%s", subs.ClientId)
 			subscription.SK = fmt.Sprintf("SUBSCRIPTION_EVENT#%s", event)
-			subscription.GSIPK = fmt.Sprintf("CLIENT#%s", subs.ClientId)
-			subscription.GSISK = fmt.Sprintf("SUBSCRIPTION_EVENT#%s", event)
+			subscription.INDEX_AUXILIAR_PK = fmt.Sprintf("ASSOCIATION#%s", subs.AssociationId)
+			subscription.INDEX_AUXILIAR_SK = fmt.Sprintf("SUBSCRIPTION_EVENT#%s", event)
 			subscription.ClientId = subs.ClientId
 			subscription.SubscriptionEvent = event
 			subscription.SubscriptionId = id.String()
@@ -100,21 +103,22 @@ func (d *DynamodbClient) CreateSubscription(subs *dto.SubscriptionDTO) (dto.Subs
 
 //ListSubscriptions return all subscriptions the client
 func (d *DynamodbClient) ListSubscriptions(associationId string) ([]dto.SubscriptionDTO, error) {
-	filt := expression.And(expression.Name("PK").BeginsWith("SUBSCRIPTION#"), expression.Name("association_id").Equal(expression.Value(associationId)))
-	expr, err := expression.NewBuilder().WithFilter(filt).Build()
+	filt := expression.Key("INDEX_AUXILIAR_PK").Equal(expression.Value(fmt.Sprintf("ASSOCIATION#%s", associationId))).And(expression.Key("INDEX_AUXILIAR_SK").BeginsWith("SUBSCRIPTION_EVENT#"))
+	expr, err := expression.NewBuilder().WithKeyCondition(filt).Build()
 	if err != nil {
 		return []dto.SubscriptionDTO{}, err
 	}
 
-	input := &dynamodb.ScanInput{
+	input := &dynamodb.QueryInput{
+		IndexName:                 &d.INDEX_AUXILIAR_ASSOCIATION,
 		ExpressionAttributeNames:  expr.Names(),
 		ExpressionAttributeValues: expr.Values(),
-		FilterExpression:          expr.Filter(),
+		KeyConditionExpression:    expr.KeyCondition(),
 		TableName:                 aws.String(d.tableName),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	output, err := d.client.ScanWithContext(ctx, input)
+	output, err := d.client.QueryWithContext(ctx, input)
 	if err != nil {
 		return []dto.SubscriptionDTO{}, err
 	}
@@ -144,23 +148,24 @@ func (d *DynamodbClient) ListSubscriptions(associationId string) ([]dto.Subscrip
 	return resultSubs, nil
 }
 
-//GetSubscription return subscription from event and client
-func (d *DynamodbClient) GetSubscription(clientId, event string) (entity.Subscription, error) {
-	filt := expression.And(expression.Name("SK").Equal(expression.Value(fmt.Sprintf("SUBSCRIPTION_EVENT#%s", event))), expression.Name("client_id").Equal(expression.Value(clientId)))
-	expr, err := expression.NewBuilder().WithFilter(filt).Build()
+//GetSubscription return subscription from event and associationId
+func (d *DynamodbClient) GetSubscription(associationId, event string) (entity.Subscription, error) {
+	filt := expression.Key("INDEX_AUXILIAR_PK").Equal(expression.Value(fmt.Sprintf("ASSOCIATION#%s", associationId))).And(expression.Key("INDEX_AUXILIAR_SK").Equal(expression.Value(fmt.Sprintf("SUBSCRIPTION_EVENT#%s", event))))
+	expr, err := expression.NewBuilder().WithKeyCondition(filt).Build()
 	if err != nil {
 		return entity.Subscription{}, err
 	}
 
-	input := &dynamodb.ScanInput{
+	input := &dynamodb.QueryInput{
+		IndexName:                 &d.INDEX_AUXILIAR_ASSOCIATION,
 		ExpressionAttributeNames:  expr.Names(),
 		ExpressionAttributeValues: expr.Values(),
-		FilterExpression:          expr.Filter(),
+		KeyConditionExpression:    expr.KeyCondition(),
 		TableName:                 aws.String(d.tableName),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	output, err := d.client.ScanWithContext(ctx, input)
+	output, err := d.client.QueryWithContext(ctx, input)
 	if err != nil {
 		return entity.Subscription{}, err
 	}
@@ -174,12 +179,43 @@ func (d *DynamodbClient) GetSubscription(clientId, event string) (entity.Subscri
 	return subscriptions[0], nil
 }
 
+//GetSubscription return subscription from part of a event and associationId
+func (d *DynamodbClient) GetSubscriptionByAssociationIdAndEvent(associationId, event string) ([]entity.Subscription, error) {
+	filt := expression.Key("INDEX_AUXILIAR_PK").Equal(expression.Value(fmt.Sprintf("ASSOCIATION#%s", associationId))).And(expression.Key("INDEX_AUXILIAR_SK").BeginsWith(fmt.Sprintf("SUBSCRIPTION_EVENT#%s", event)))
+	expr, err := expression.NewBuilder().WithKeyCondition(filt).Build()
+	if err != nil {
+		return []entity.Subscription{}, err
+	}
+
+	input := &dynamodb.QueryInput{
+		IndexName:                 &d.INDEX_AUXILIAR_ASSOCIATION,
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		KeyConditionExpression:    expr.KeyCondition(),
+		TableName:                 aws.String(d.tableName),
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	output, err := d.client.QueryWithContext(ctx, input)
+	if err != nil {
+		return []entity.Subscription{}, err
+	}
+	subscriptions := []entity.Subscription{}
+	if err := dynamodbattribute.UnmarshalListOfMaps(output.Items, &subscriptions); err != nil {
+		return []entity.Subscription{}, err
+	}
+	if len(subscriptions) == 0 {
+		return []entity.Subscription{}, ErrorSubscriptinEventNotFound
+	}
+	return subscriptions, nil
+}
+
 //DeleteSubscription execute remove the event subscription
-func (d *DynamodbClient) DeleteSubscription(clientId, idSubscription, event string) error {
+func (d *DynamodbClient) DeleteSubscription(clientId, event string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	sub := entity.Subscription{
-		PK: fmt.Sprintf("SUBSCRIPTION#%s", idSubscription),
+		PK: fmt.Sprintf("SUBSCRIPTION#%s", clientId),
 		SK: fmt.Sprintf("SUBSCRIPTION_EVENT#%s", event),
 	}
 	item, err := dynamodbattribute.MarshalMap(sub)
@@ -206,15 +242,15 @@ func (d *DynamodbClient) CreateClients(client dto.ClientDTO) (string, error) {
 		return "", err
 	}
 	newClient := entity.Clients{
-		PK:            fmt.Sprintf("CLIENT#%s", newApiKey),
-		SK:            fmt.Sprintf("CLIENT_SERVICE#%s", client.Service),
-		GSIPK:         newApiKey,
-		GSISK:         client.Service,
-		Identifier:    client.Identifier,
-		Service:       client.Service,
-		AssociationId: client.AssociationId,
-		CreatedAt:     time.Now().Format("2006-01-02 15:04:05"),
-		UpdatedAt:     time.Now().Format("2006-01-02 15:04:05"),
+		PK:                fmt.Sprintf("CLIENT#%s", newApiKey),
+		SK:                fmt.Sprintf("CLIENT_SERVICE#%s", client.Service),
+		INDEX_AUXILIAR_PK: fmt.Sprintf("ASSOCIATION#%s", client.AssociationId),
+		INDEX_AUXILIAR_SK: fmt.Sprintf("CLIENT_SERVICE#%s", client.Service),
+		Identifier:        client.Identifier,
+		Service:           client.Service,
+		AssociationId:     client.AssociationId,
+		CreatedAt:         time.Now().Format("2006-01-02 15:04:05"),
+		UpdatedAt:         time.Now().Format("2006-01-02 15:04:05"),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
@@ -294,22 +330,23 @@ func (d *DynamodbClient) GetClients(apiKey, service string) (entity.Clients, err
 }
 
 //ExisteClient return client by identifier in table
-func (d *DynamodbClient) ExistClient(clientId, service string) (entity.Clients, bool, error) {
-	filt := expression.And(expression.Name("identifier").Equal(expression.Value(clientId)), expression.Name("SK").Equal(expression.Value(fmt.Sprintf("CLIENT_SERVICE#%s", service))))
-	expr, err := expression.NewBuilder().WithFilter(filt).Build()
+func (d *DynamodbClient) ExistClient(association_id, service string) (entity.Clients, bool, error) {
+	filt := expression.Key("INDEX_AUXILIAR_PK").Equal(expression.Value(fmt.Sprintf("ASSOCIATION#%s", association_id))).And(expression.Key("INDEX_AUXILIAR_SK").Equal(expression.Value(fmt.Sprintf("CLIENT_SERVICE#%s", service))))
+	expr, err := expression.NewBuilder().WithKeyCondition(filt).Build()
 	if err != nil {
 		return entity.Clients{}, false, err
 	}
 
-	input := &dynamodb.ScanInput{
+	input := &dynamodb.QueryInput{
+		IndexName:                 &d.INDEX_AUXILIAR_ASSOCIATION,
 		ExpressionAttributeNames:  expr.Names(),
 		ExpressionAttributeValues: expr.Values(),
-		FilterExpression:          expr.Filter(),
+		KeyConditionExpression:    expr.KeyCondition(),
 		TableName:                 aws.String(d.tableName),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	output, err := d.client.ScanWithContext(ctx, input)
+	output, err := d.client.QueryWithContext(ctx, input)
 	if err != nil {
 		return entity.Clients{}, false, err
 	}
@@ -326,22 +363,22 @@ func (d *DynamodbClient) ExistClient(clientId, service string) (entity.Clients, 
 
 //GetClientByApiKey return client by api key
 func (d *DynamodbClient) GetClientByApiKey(apiKey string) (entity.Clients, error) {
-	filt := expression.Name("GSIPK").Equal(expression.Value(apiKey))
-	expr, err := expression.NewBuilder().WithFilter(filt).Build()
+	filt := expression.Key("PK").Equal(expression.Value(fmt.Sprintf("CLIENT#%s", apiKey)))
+	expr, err := expression.NewBuilder().WithKeyCondition(filt).Build()
 	if err != nil {
 		return entity.Clients{}, err
 	}
 
-	input := &dynamodb.ScanInput{
+	input := &dynamodb.QueryInput{
 		ExpressionAttributeNames:  expr.Names(),
 		ExpressionAttributeValues: expr.Values(),
-		FilterExpression:          expr.Filter(),
+		KeyConditionExpression:    expr.KeyCondition(),
 		TableName:                 aws.String(d.tableName),
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	output, err := d.client.ScanWithContext(ctx, input)
+	output, err := d.client.QueryWithContext(ctx, input)
 	if err != nil {
 		return entity.Clients{}, err
 	}
@@ -360,11 +397,11 @@ func (d *DynamodbClient) GetClientByApiKey(apiKey string) (entity.Clients, error
 func (d *DynamodbClient) DeleteClients(apiKey, service string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	serv := entity.Services{
+	client := entity.Clients{
 		PK: fmt.Sprintf("CLIENT#%s", apiKey),
 		SK: fmt.Sprintf("CLIENT_SERVICE#%s", service),
 	}
-	item, err := dynamodbattribute.MarshalMap(serv)
+	item, err := dynamodbattribute.MarshalMap(client)
 	if err != nil {
 		return err
 	}
@@ -384,23 +421,25 @@ func (d *DynamodbClient) CreateServices(serv dto.ServicesDTO) (string, error) {
 	secret := os.Getenv("SECRET")
 	services := []entity.Services{}
 	id := uuid.New()
+	plainKey := fmt.Sprintf("%s:%s:%s", id, serv.Name, secret)
+	apiKey, err := utils.GenerateApiKey(plainKey)
 	for _, ev := range serv.Events {
-		plainKey := fmt.Sprintf("%s:%s:%s", ev, serv.Name, secret)
-		apiKey, err := utils.GenerateApiKey(plainKey)
 		if err != nil {
 			return "", err
 		}
+		serviceEntity := strings.Split(ev, ".")[1]
 		service := entity.Services{
-			PK:           fmt.Sprintf("SERVICE#%s", id.String()),
-			SK:           fmt.Sprintf("SERVICE_EVENT#%s", ev),
-			GSIPK:        serv.Name,
-			GSISK:        fmt.Sprintf("SERVICE_EVENT#%s", ev),
-			ApiKey:       apiKey,
-			Name:         serv.Name,
-			ServiceEvent: ev,
-			ServiceId:    id.String(),
-			CreatedAt:    time.Now().Format("2006-01-02 15:04:05"),
-			UpdatedAt:    time.Now().Format("2006-01-02 15:04:05"),
+			PK:                fmt.Sprintf("SERVICE#%s", serv.Name),
+			SK:                fmt.Sprintf("SERVICE_EVENT#%s", ev),
+			INDEX_AUXILIAR_PK: fmt.Sprintf("SERVICE#%s", apiKey),
+			INDEX_AUXILIAR_SK: fmt.Sprintf("SERVICE_EVENT#%s", ev),
+			ApiKey:            apiKey,
+			Name:              serv.Name,
+			ServiceEvent:      ev,
+			Entity:            serviceEntity,
+			ServiceId:         id.String(),
+			CreatedAt:         time.Now().Format("2006-01-02 15:04:05"),
+			UpdatedAt:         time.Now().Format("2006-01-02 15:04:05"),
 		}
 		services = append(services, service)
 	}
@@ -426,7 +465,7 @@ func (d *DynamodbClient) CreateServices(serv dto.ServicesDTO) (string, error) {
 		}
 	}
 	d.logger.Error(fmt.Sprintf("ITENS SERVICES ERRORS: %+v", putItensError))
-	return id.String(), nil
+	return apiKey, nil
 }
 
 //ListServices return all services with events
@@ -459,21 +498,21 @@ func (d *DynamodbClient) ListServices() ([]entity.Services, error) {
 
 //GetServices return all events from service
 func (d *DynamodbClient) GetServices(serviceName string) ([]entity.Services, error) {
-	filt := expression.Name("name").Equal(expression.Value(serviceName))
-	expr, err := expression.NewBuilder().WithFilter(filt).Build()
+	keyCondition := expression.Key("PK").Equal(expression.Value(fmt.Sprintf("SERVICE#%s", serviceName)))
+	expr, err := expression.NewBuilder().WithKeyCondition(keyCondition).Build()
 	if err != nil {
 		return []entity.Services{}, err
 	}
 
-	input := &dynamodb.ScanInput{
+	input := &dynamodb.QueryInput{
 		ExpressionAttributeNames:  expr.Names(),
 		ExpressionAttributeValues: expr.Values(),
-		FilterExpression:          expr.Filter(),
+		KeyConditionExpression:    expr.KeyCondition(),
 		TableName:                 aws.String(d.tableName),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	output, err := d.client.ScanWithContext(ctx, input)
+	output, err := d.client.QueryWithContext(ctx, input)
 	if err != nil {
 		return []entity.Services{}, err
 	}
@@ -487,21 +526,21 @@ func (d *DynamodbClient) GetServices(serviceName string) ([]entity.Services, err
 
 //GetServicesEvents return service event from table
 func (d *DynamodbClient) GetServicesEvents(serviceName, event string) (entity.Services, error) {
-	filt := expression.And(expression.Name("SK").Equal(expression.Value(fmt.Sprintf("SERVICE_EVENT#%s", event))), expression.Name("name").Equal(expression.Value(serviceName)))
-	expr, err := expression.NewBuilder().WithFilter(filt).Build()
+	filt := expression.Key("PK").Equal(expression.Value(fmt.Sprintf("SERVICE#%s", serviceName))).And(expression.Key("SK").Equal(expression.Value(fmt.Sprintf("SERVICE_EVENT#%s", event))))
+	expr, err := expression.NewBuilder().WithKeyCondition(filt).Build()
 	if err != nil {
 		return entity.Services{}, err
 	}
 
-	input := &dynamodb.ScanInput{
+	input := &dynamodb.QueryInput{
 		ExpressionAttributeNames:  expr.Names(),
 		ExpressionAttributeValues: expr.Values(),
-		FilterExpression:          expr.Filter(),
+		KeyConditionExpression:    expr.KeyCondition(),
 		TableName:                 aws.String(d.tableName),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	output, err := d.client.ScanWithContext(ctx, input)
+	output, err := d.client.QueryWithContext(ctx, input)
 	if err != nil {
 		return entity.Services{}, err
 	}
@@ -516,12 +555,45 @@ func (d *DynamodbClient) GetServicesEvents(serviceName, event string) (entity.Se
 
 }
 
+//GetClientByApiKey return service by api key
+func (d *DynamodbClient) GetServiceByApiKey(apiKey string) (entity.Services, error) {
+	filt := expression.Key("INDEX_AUXILIAR_PK").Equal(expression.Value(fmt.Sprintf("SERVICE#%s", apiKey)))
+	expr, err := expression.NewBuilder().WithKeyCondition(filt).Build()
+	if err != nil {
+		return entity.Services{}, err
+	}
+
+	input := &dynamodb.QueryInput{
+		IndexName:                 &d.INDEX_AUXILIAR_ASSOCIATION,
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		KeyConditionExpression:    expr.KeyCondition(),
+		TableName:                 aws.String(d.tableName),
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	output, err := d.client.QueryWithContext(ctx, input)
+	if err != nil {
+		return entity.Services{}, err
+	}
+	services := []entity.Services{}
+	if err := dynamodbattribute.UnmarshalListOfMaps(output.Items, &services); err != nil {
+		return entity.Services{}, err
+	}
+	if *output.Count == 0 {
+		return entity.Services{}, ErrorClientNotFound
+	}
+
+	return services[0], nil
+}
+
 //DeleteServices execute remotion of events the services
-func (d *DynamodbClient) DeleteServices(idService, event string) error {
+func (d *DynamodbClient) DeleteServices(serviceName, event string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	serv := entity.Services{
-		PK: fmt.Sprintf("SERVICE#%s", idService),
+		PK: fmt.Sprintf("SERVICE#%s", serviceName),
 		SK: fmt.Sprintf("SERVICE_EVENT#%s", event),
 	}
 	item, err := dynamodbattribute.MarshalMap(serv)
@@ -541,16 +613,22 @@ func (d *DynamodbClient) DeleteServices(idService, event string) error {
 
 //PutEventService add event to service
 func (d *DynamodbClient) PutEventService(serviceName, idService, event string) (interface{}, error) {
+	secret := os.Getenv("SECRET")
+	serviceEntity := strings.Split(event, ".")[1]
+	plainKey := fmt.Sprintf("%s:%s:%s", idService, serviceName, secret)
+	apiKey, err := utils.GenerateApiKey(plainKey)
 	serviceEvent := entity.Services{
-		PK:           fmt.Sprintf("SERVICE#%s", idService),
-		SK:           fmt.Sprintf("SERVICE_EVENT#%s", event),
-		GSIPK:        serviceName,
-		GSISK:        fmt.Sprintf("SERVICE_EVENT#%s", event),
-		Name:         serviceName,
-		ServiceEvent: event,
-		ServiceId:    idService,
-		CreatedAt:    time.Now().Format("2006-01-02 15:04:05"),
-		UpdatedAt:    time.Now().Format("2006-01-02 15:04:05"),
+		PK:                fmt.Sprintf("SERVICE#%s", serviceName),
+		SK:                fmt.Sprintf("SERVICE_EVENT#%s", event),
+		INDEX_AUXILIAR_PK: fmt.Sprintf("SERVICE#%s", idService),
+		INDEX_AUXILIAR_SK: fmt.Sprintf("SERVICE_EVENT#%s", event),
+		Name:              serviceName,
+		ServiceEvent:      event,
+		ServiceId:         idService,
+		Entity:            serviceEntity,
+		ApiKey:            apiKey,
+		CreatedAt:         time.Now().Format("2006-01-02 15:04:05"),
+		UpdatedAt:         time.Now().Format("2006-01-02 15:04:05"),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
@@ -571,21 +649,21 @@ func (d *DynamodbClient) PutEventService(serviceName, idService, event string) (
 
 //ExistService return boolean if exist service in table
 func (d *DynamodbClient) ExistService(serviceName string) (bool, string, error) {
-	filt := expression.Name("name").Equal(expression.Value(serviceName))
-	expr, err := expression.NewBuilder().WithFilter(filt).Build()
+	filt := expression.Key("PK").Equal(expression.Value(fmt.Sprintf("SERVICE#%s", serviceName)))
+	expr, err := expression.NewBuilder().WithKeyCondition(filt).Build()
 	if err != nil {
 		return false, "", err
 	}
 
-	input := &dynamodb.ScanInput{
+	input := &dynamodb.QueryInput{
 		ExpressionAttributeNames:  expr.Names(),
 		ExpressionAttributeValues: expr.Values(),
-		FilterExpression:          expr.Filter(),
+		KeyConditionExpression:    expr.KeyCondition(),
 		TableName:                 aws.String(d.tableName),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
-	output, err := d.client.ScanWithContext(ctx, input)
+	output, err := d.client.QueryWithContext(ctx, input)
 	if err != nil {
 		return false, "", err
 	}

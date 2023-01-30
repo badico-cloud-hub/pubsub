@@ -4,8 +4,8 @@ package entity
 type Subscription struct {
 	PK                string `dynamodbav:"PK,omitempty"`
 	SK                string `dynamodbav:"SK,omitempty"`
-	GSIPK             string `dynamodbav:"GSIPK,omitempty"`
-	GSISK             string `dynamodbav:"GSISK,omitempty"`
+	INDEX_AUXILIAR_PK string `dynamodbav:"INDEX_AUXILIAR_PK,omitempty"`
+	INDEX_AUXILIAR_SK string `dynamodbav:"INDEX_AUXILIAR_SK,omitempty"`
 	ClientId          string `dynamodbav:"client_id,omitempty"`
 	SubscriptionEvent string `dynamodbav:"subscription_event,omitempty"`
 	SubscriptionUrl   string `dynamodbav:"subscription_url,omitempty"`
