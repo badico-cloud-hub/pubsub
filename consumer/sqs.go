@@ -79,8 +79,6 @@ func (c *SQSConsumer) Init(wg *sync.WaitGroup) {
 
 func (c *SQSConsumer) initChannels(wg *sync.WaitGroup) {
 	semaphore := make(chan struct{}, 10)
-	// sem semaphore = 120 go func  e 10sec
-	//
 	for {
 		wg.Add(1)
 		fmt.Printf("LENGTH GO ROUTINES: %+v\n", runtime.NumGoroutine())
