@@ -221,6 +221,24 @@ func (s *Server) createSubscription(w http.ResponseWriter, r *http.Request) {
 		createSubscriptionLog.Errorln(err.Error())
 		return
 	}
+
+	client, _ := s.Dynamo.GetClientByApiKey(r.Header.Get("c-token"))
+	for _, event := range subs.Events {
+		subscriptionService := strings.Split(event, ".")[0]
+		_, err := s.Dynamo.GetServicesEvents(subscriptionService, event)
+		if err != nil {
+			createSubscriptionLog.Errorln(err.Error())
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
+			return
+		}
+		if client.Service != subscriptionService {
+			w.WriteHeader(http.StatusForbidden)
+			_ = json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "Not Authorized"})
+			return
+		}
+	}
+
 	result, err := s.Dynamo.CreateSubscription(&subs)
 	if err != nil {
 		createSubscriptionLog.Errorln(err.Error())
@@ -279,7 +297,7 @@ func (s *Server) deleteSubscription(w http.ResponseWriter, r *http.Request) {
 			deleteSubscriptionLog.Errorln(err.Error())
 		}
 		if subscription.ClientId == clientId && subscription.SubscriptionEvent == event {
-			if err := s.Dynamo.DeleteSubscription(clientId, event); err != nil {
+			if err := s.Dynamo.DeleteSubscription(clientId, event, subscription.SubscriptionUrl); err != nil {
 				deleteSubscriptionLog.Errorln(err.Error())
 			}
 			deleteSubscriptionLog.Infof("Subscription with AssociationId %s, Event %s, ClientId %s and Id %s deleted!", associationId, event, clientId, id)
@@ -295,7 +313,7 @@ func (s *Server) deleteSubscription(w http.ResponseWriter, r *http.Request) {
 		for _, sub := range subscriptions {
 			if sub.SubscriptionId == id && sub.ClientId == clientId {
 				for _, ev := range sub.Events {
-					if err := s.Dynamo.DeleteSubscription(clientId, ev); err != nil {
+					if err := s.Dynamo.DeleteSubscription(clientId, ev, sub.SubscriptionUrl); err != nil {
 						deleteSubscriptionLog.Errorln(err.Error())
 					}
 				}
@@ -901,10 +919,18 @@ func (s *Server) testNotification(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	subscriptionsResponse := []dto.SubscriptionDTO{}
+
+	for _, subs := range subscriptionsFiltered {
+		subscriptionsResponse = append(subscriptionsResponse, dto.SubscriptionDTO{
+			SubscriptionUrl: subs.SubscriptionUrl,
+		})
+	}
+
 	respNotSubscriptions = dto.ResponseNotifyDTO{
 		Ok:     true,
 		Topic:  notif.Event,
-		SentTo: subscriptionsFiltered,
+		SentTo: subscriptionsResponse,
 	}
 
 	testNotificationLog.Infof("Send notification to Subscriptions: %+v", respNotSubscriptions)
