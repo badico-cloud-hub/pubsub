@@ -61,7 +61,7 @@ func (d *DynamodbClient) CreateSubscription(subs *dto.SubscriptionDTO) (dto.Subs
 		for _, event := range subs.Events {
 			subscription := entity.Subscription{}
 			subscription.PK = fmt.Sprintf("SUBSCRIPTION#%s", subs.ClientId)
-			subscription.SK = fmt.Sprintf("SUBSCRIPTION_EVENT#%s", event)
+			subscription.SK = fmt.Sprintf("SUBSCRIPTION_EVENT#%s#%s", event, subs.Url)
 			subscription.INDEX_AUXILIAR_PK = fmt.Sprintf("ASSOCIATION#%s", subs.AssociationId)
 			subscription.INDEX_AUXILIAR_SK = fmt.Sprintf("SUBSCRIPTION_EVENT#%s", event)
 			subscription.ClientId = subs.ClientId
@@ -134,10 +134,8 @@ func (d *DynamodbClient) ListSubscriptions(associationId string) ([]dto.Subscrip
 		}
 		for _, sliceSubs := range mapSubscriptions {
 			subscription := dto.SubscriptionDTO{}
-			subscription.ClientId = sliceSubs[0].ClientId
 			subscription.SubscriptionId = sliceSubs[0].SubscriptionId
 			subscription.SubscriptionUrl = sliceSubs[0].SubscriptionUrl
-			subscription.AssociationId = sliceSubs[0].AssociationId
 			for _, events := range sliceSubs {
 				subscription.Events = append(subscription.Events, events.SubscriptionEvent)
 			}
@@ -150,7 +148,7 @@ func (d *DynamodbClient) ListSubscriptions(associationId string) ([]dto.Subscrip
 
 //GetSubscription return subscription from event and associationId
 func (d *DynamodbClient) GetSubscription(associationId, event string) (entity.Subscription, error) {
-	filt := expression.Key("INDEX_AUXILIAR_PK").Equal(expression.Value(fmt.Sprintf("ASSOCIATION#%s", associationId))).And(expression.Key("INDEX_AUXILIAR_SK").Equal(expression.Value(fmt.Sprintf("SUBSCRIPTION_EVENT#%s", event))))
+	filt := expression.Key("INDEX_AUXILIAR_PK").Equal(expression.Value(fmt.Sprintf("ASSOCIATION#%s", associationId))).And(expression.Key("INDEX_AUXILIAR_SK").BeginsWith(fmt.Sprintf("SUBSCRIPTION_EVENT#%s", event)))
 	expr, err := expression.NewBuilder().WithKeyCondition(filt).Build()
 	if err != nil {
 		return entity.Subscription{}, err
@@ -211,12 +209,12 @@ func (d *DynamodbClient) GetSubscriptionByAssociationIdAndEvent(associationId, e
 }
 
 //DeleteSubscription execute remove the event subscription
-func (d *DynamodbClient) DeleteSubscription(clientId, event string) error {
+func (d *DynamodbClient) DeleteSubscription(clientId, event, url string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 	sub := entity.Subscription{
 		PK: fmt.Sprintf("SUBSCRIPTION#%s", clientId),
-		SK: fmt.Sprintf("SUBSCRIPTION_EVENT#%s", event),
+		SK: fmt.Sprintf("SUBSCRIPTION_EVENT#%s#%s", event, url),
 	}
 	item, err := dynamodbattribute.MarshalMap(sub)
 	if err != nil {
@@ -526,7 +524,7 @@ func (d *DynamodbClient) GetServices(serviceName string) ([]entity.Services, err
 
 //GetServicesEvents return service event from table
 func (d *DynamodbClient) GetServicesEvents(serviceName, event string) (entity.Services, error) {
-	filt := expression.Key("PK").Equal(expression.Value(fmt.Sprintf("SERVICE#%s", serviceName))).And(expression.Key("SK").Equal(expression.Value(fmt.Sprintf("SERVICE_EVENT#%s", event))))
+	filt := expression.Key("PK").Equal(expression.Value(fmt.Sprintf("SERVICE#%s", serviceName))).And(expression.Key("SK").BeginsWith(fmt.Sprintf("SERVICE_EVENT#%s", event)))
 	expr, err := expression.NewBuilder().WithKeyCondition(filt).Build()
 	if err != nil {
 		return entity.Services{}, err
