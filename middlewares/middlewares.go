@@ -38,7 +38,7 @@ func AuthorizeMiddleware(next http.Handler) http.Handler {
 		if err := dynamo.Setup(); err != nil {
 			log.Fatal(err)
 		}
-		headerApiKey := r.Header.Get("api-key")
+		headerApiKey := r.Header.Get("c-token")
 		if headerApiKey != "" {
 			client, err := dynamo.GetClientByApiKey(headerApiKey)
 			if err != nil {
@@ -69,7 +69,7 @@ func AuthorizeMiddlewareByServiceApiKey(next http.Handler) http.Handler {
 		if err := dynamo.Setup(); err != nil {
 			log.Fatal(err)
 		}
-		headerApiKey := r.Header.Get("api-key")
+		headerApiKey := r.Header.Get("s-token")
 		if headerApiKey != "" {
 			_, err := dynamo.GetServiceByApiKey(headerApiKey)
 			if err != nil {
@@ -94,7 +94,7 @@ func AuthorizeMiddlewareByServiceApiKey(next http.Handler) http.Handler {
 func AuthorizeAdminMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		logger := utils.NewLogger(os.Stdout)
-		headerApiKey := r.Header.Get("api-key")
+		headerApiKey := r.Header.Get("a-token")
 		strBase64 := os.Getenv("ADMIN_APIS_KEY")
 		adminApisKeysJson, err := base64.StdEncoding.DecodeString(strBase64)
 

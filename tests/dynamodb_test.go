@@ -96,7 +96,7 @@ func TestDeleteSubscriptions(t *testing.T) {
 	if err := dynamo.Setup(); err != nil {
 		t.Errorf("TestDeleteSubscriptions: expect(nil) - got(%s)\n", err.Error())
 	}
-	if err := dynamo.DeleteSubscription("id@tom", "batch-item.pix.paid"); err != nil {
+	if err := dynamo.DeleteSubscription("id@tom", "batch-item.pix.paid", "google.com"); err != nil {
 		t.Errorf("TestDeleteSubscriptions: expect(nil) - got(%s)\n", err.Error())
 	}
 }
