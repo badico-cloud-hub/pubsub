@@ -13,11 +13,12 @@ import (
 
 //RabbitMQ is struct for broker in amazon mq
 type RabbitMQ struct {
-	url      string
-	conn     *amqp.Connection
-	ch       *amqp.Channel
-	queue    amqp.Queue
-	queueDlq amqp.Queue
+	url         string
+	conn        *amqp.Connection
+	ch          *amqp.Channel
+	queue       amqp.Queue
+	queueDlq    amqp.Queue
+	queueNotify amqp.Queue
 }
 
 //NewRabbitMQ return new instance of RabbitMQ
@@ -60,6 +61,16 @@ func (r *RabbitMQ) Setup() error {
 		false,        // no-wait
 		nil,          // arguments
 	)
+
+	qn, err := channel.QueueDeclare(
+		"pubsub_service_notify", // name
+		true,                    // durable
+		false,                   // delete when unused
+		false,                   // exclusive
+		false,                   // no-wait
+		nil,                     // arguments
+	)
+
 	if err != nil {
 		return err
 	}
@@ -68,6 +79,7 @@ func (r *RabbitMQ) Setup() error {
 	r.ch = channel
 	r.queue = q
 	r.queueDlq = qd
+	r.queueNotify = qn
 	return nil
 }
 
@@ -135,6 +147,31 @@ func (r *RabbitMQ) Dlq(queueMessage dto.QueueMessage) error {
 	return nil
 }
 
+//ProducerNotify is send message to notify queue
+func (r *RabbitMQ) ProducerNotify(notify dto.NotifierDTO) error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	notifyBytes, err := json.Marshal(notify)
+	if err != nil {
+		return err
+	}
+	if err := r.ch.PublishWithContext(
+		ctx,
+		"",
+		r.queueNotify.Name,
+		false,
+		false,
+		amqp.Publishing{
+			Timestamp: time.Now(),
+			Type:      "text/plain",
+			Body:      notifyBytes,
+		}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 //Consumer is return channel for consume from broker
 func (r *RabbitMQ) Consumer() (<-chan amqp.Delivery, error) {
 	msgs, err := r.ch.Consume(
@@ -145,6 +182,22 @@ func (r *RabbitMQ) Consumer() (<-chan amqp.Delivery, error) {
 		false,        // no-local
 		false,        // no-wait
 		nil,          // args
+	)
+	if err != nil {
+		return nil, err
+	}
+	return msgs, nil
+}
+
+func (r *RabbitMQ) ConsumerNotifyQueue() (<-chan amqp.Delivery, error) {
+	msgs, err := r.ch.Consume(
+		r.queueNotify.Name, // queue
+		"",                 // consumer
+		true,               // auto-ack
+		false,              // exclusive
+		false,              // no-local
+		false,              // no-wait
+		nil,                // args
 	)
 	if err != nil {
 		return nil, err
