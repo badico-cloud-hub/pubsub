@@ -264,12 +264,20 @@ func (s *Server) listSubscriptions(w http.ResponseWriter, r *http.Request) {
 	associationId := r.Header.Get("association-id")
 	listSubscriptionsLog.AddTraceRef(fmt.Sprintf("AssociationId: %s", associationId))
 	resultSubs, err := s.Dynamo.ListSubscriptions(associationId)
+	subsResponse := []dto.SubscriptionDTO{}
+	for _, sub := range resultSubs {
+		subsResponse = append(subsResponse, dto.SubscriptionDTO{
+			Events:          sub.Events,
+			SubscriptionUrl: sub.SubscriptionUrl,
+			SubscriptionId:  sub.SubscriptionId,
+		})
+	}
 	if err != nil {
 		listSubscriptionsLog.Errorln(err.Error())
 		return
 	}
-	listSubscriptionsLog.Infof("Subscriptions: %+v", resultSubs)
-	if err := json.NewEncoder(w).Encode(&resultSubs); err != nil {
+	listSubscriptionsLog.Infof("Subscriptions: %+v", subsResponse)
+	if err := json.NewEncoder(w).Encode(&subsResponse); err != nil {
 		listSubscriptionsLog.Errorln(err.Error())
 		return
 	}

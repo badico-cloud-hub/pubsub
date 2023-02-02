@@ -136,6 +136,8 @@ func (d *DynamodbClient) ListSubscriptions(associationId string) ([]dto.Subscrip
 			subscription := dto.SubscriptionDTO{}
 			subscription.SubscriptionId = sliceSubs[0].SubscriptionId
 			subscription.SubscriptionUrl = sliceSubs[0].SubscriptionUrl
+			subscription.ClientId = sliceSubs[0].ClientId
+			subscription.AssociationId = sliceSubs[0].AssociationId
 			for _, events := range sliceSubs {
 				subscription.Events = append(subscription.Events, events.SubscriptionEvent)
 			}

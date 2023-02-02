@@ -81,6 +81,35 @@ func TestConsumer(t *testing.T) {
 	<-forever
 }
 
+func TestConsumerNotify(t *testing.T) {
+	if err := godotenv.Load("../.env"); err != nil {
+		t.Errorf("TestConsumer: expect(nil) - got(%s)\n", err.Error())
+	}
+	rabbit := infra.NewRabbitMQ()
+	if rabbit == nil {
+		t.Errorf("TestConsumer: expect(!nil) - got(nil)\n")
+	}
+	if err := rabbit.Setup(); err != nil {
+		t.Errorf("TestConsumer: expect(nil) - got(%s)\n", err.Error())
+	}
+
+	ch, err := rabbit.ConsumerNotifyQueue()
+	if err != nil {
+		t.Errorf("TestConsumer: expect(nil) - got(%s)\n", err.Error())
+	}
+	var forever chan struct{}
+	go func() {
+		for msg := range ch {
+			fmt.Printf("Body: %+v\n", string(msg.Body))
+			if err := rabbit.Ack(msg.DeliveryTag); err != nil {
+				t.Errorf("TestConsumer: expect(nil) - got(%s)\n", err.Error())
+
+			}
+		}
+	}()
+	<-forever
+}
+
 func TestConsumerDlq(t *testing.T) {
 	if err := godotenv.Load("../.env"); err != nil {
 		t.Errorf("TestConsumerDlq: expect(nil) - got(%s)\n", err.Error())
@@ -179,6 +208,33 @@ func TestProducerDlq(t *testing.T) {
 
 		if err := rabbit.Dlq(dto.QueueMessage{}); err != nil {
 			t.Errorf("TestProducerDlq: expect(nil) - got(%s)\n", err.Error())
+		}
+	}
+
+	rabbit.Release()
+}
+
+func TestProducerNotify(t *testing.T) {
+	if err := godotenv.Load("../.env"); err != nil {
+		t.Errorf("TestProducer: expect(nil) - got(%s)\n", err.Error())
+	}
+	rabbit := infra.NewRabbitMQ()
+	if rabbit == nil {
+		t.Errorf("TestProducer: expect(!nil) - got(nil)\n")
+	}
+	if err := rabbit.Setup(); err != nil {
+		t.Errorf("TestProducer: expect(nil) - got(%s)\n", err.Error())
+	}
+	for i := 0; i < 10; i++ {
+		fmt.Printf("send: %v\n", i)
+		notify := dto.NotifierDTO{
+			Event:          "pix.cashin.created",
+			AssociationsId: []string{"edassociation@myassociation"},
+			Data:           make(map[string]interface{}),
+		}
+
+		if err := rabbit.ProducerNotify(notify); err != nil {
+			t.Errorf("TestProducer: expect(nil) - got(%s)\n", err.Error())
 		}
 	}
 
