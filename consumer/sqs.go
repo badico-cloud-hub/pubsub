@@ -6,7 +6,6 @@ import (
 	"os"
 	"runtime"
 	"sync"
-	"time"
 
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"github.com/badico-cloud-hub/log-driver/producer"
@@ -42,13 +41,12 @@ type SQSConsumer struct {
 	err                 chan *ErrorMessage
 	handle              chan *dto.QueueMessage
 	maxNumberOfMessages int64
-	pollInterval        time.Duration
 	rabbitMqClient      *infra.RabbitMQ
 	logManager          *producer.LoggerManager
 	dynamo              *infra.DynamodbClient
 }
 
-func NewSQSConsumer(queueUrl, dlq string, sqsClient *sqs.SQS, consumer ConsumerHandler, maxNumberOfMessages int64, pollInterval time.Duration, logManager *producer.LoggerManager, dynamoClient *infra.DynamodbClient) (*SQSConsumer, error) {
+func NewSQSConsumer(queueUrl, dlq string, sqsClient *sqs.SQS, consumer ConsumerHandler, maxNumberOfMessages int64, logManager *producer.LoggerManager, dynamoClient *infra.DynamodbClient) (*SQSConsumer, error) {
 
 	err := make(chan *ErrorMessage)
 	handle := make(chan *dto.QueueMessage)
@@ -66,7 +64,6 @@ func NewSQSConsumer(queueUrl, dlq string, sqsClient *sqs.SQS, consumer ConsumerH
 		err,
 		handle,
 		maxNumberOfMessages,
-		pollInterval,
 		rabbitMqClient,
 		logManager,
 		dynamoClient,
@@ -83,19 +80,15 @@ func (c *SQSConsumer) Init(wg *sync.WaitGroup) {
 }
 
 func (c *SQSConsumer) initChannels(wg *sync.WaitGroup) {
-	semaphore := make(chan struct{}, 10)
-
 	for {
 		wg.Add(1)
 		fmt.Printf("LENGTH GO ROUTINES: %+v\n", runtime.NumGoroutine())
 		select {
 		case queueMessage := <-c.handle:
-			semaphore <- struct{}{}
-			go c.handleMessage(queueMessage, wg, &semaphore)
+			go c.handleMessage(queueMessage, wg)
 
 		case err := <-c.err:
-			semaphore <- struct{}{}
-			go c.handleError(err, wg, &semaphore)
+			go c.handleError(err, wg)
 
 		}
 	}
@@ -117,7 +110,6 @@ func (c *SQSConsumer) consume() {
 		}
 		c.handle <- &queueMessage
 
-		time.Sleep(c.pollInterval)
 	}
 
 }
@@ -132,69 +124,70 @@ func (c *SQSConsumer) notify() {
 	}
 
 	for msg := range msgs {
-		notif, err := adaptQueueMessageFromNotifyQueue(msg)
-		if err != nil {
-			notifyLog.Errorf("failed to fetch queue message %v in a queue %s", err, c.queueUrl)
-			continue
-		}
-		notifyLog.AddTraceRef(fmt.Sprintf("AssociationsId: %+v", notif.AssociationsId))
-		notifyLog.AddTraceRef(fmt.Sprintf("Event: %+v", notif.Event))
-
-		subscriptions := []entity.Subscription{}
-		subscriptionsFiltered := []dto.SubscriptionDTO{}
-
-		for _, associationId := range notif.AssociationsId {
-			newSubsciptions, err := c.dynamo.GetSubscriptionByAssociationIdAndEvent(associationId, notif.Event)
-			if err != nil && err == infra.ErrorSubscriptinEventNotFound {
-				notifyLog.Errorf("Subscription with AssociationId %s and Event %s not found", associationId, notif.Event)
-				continue
-			}
-
-			if err != nil {
-				notifyLog.Errorln(err.Error())
-				continue
-			}
-
-			subscriptions = append(subscriptions, newSubsciptions...)
-		}
-
-		for _, subscription := range subscriptions {
-			if duplicated := utils.VerifyIfUrlIsDuplicated(subscriptionsFiltered, subscription.SubscriptionUrl, subscription.SubscriptionEvent); !duplicated {
-				subscriptionsFiltered = append(subscriptionsFiltered, dto.SubscriptionDTO{
-					AssociationId:     subscription.AssociationId,
-					ClientId:          subscription.ClientId,
-					AuthProvider:      "",
-					SubscriptionUrl:   subscription.SubscriptionUrl,
-					SubscriptionEvent: subscription.SubscriptionEvent,
-					CreatedAt:         notif.CreatedAt,
-				})
-			}
-		}
-
-		for _, subscription := range subscriptionsFiltered {
-			notif.Data["topic"] = subscription.SubscriptionEvent
-			notif.Data["created_at"] = subscription.CreatedAt
-			queueMessage := dto.QueueMessage{
-				ClientId:      subscription.ClientId,
-				AssociationId: subscription.AssociationId,
-				Url:           subscription.SubscriptionUrl,
-				AuthProvider:  subscription.AuthProvider,
-				Body:          notif.Data,
-			}
-			notifyLog.Infof("Sending to qeueue: %+v", queueMessage)
-			err = c.rabbitMqClient.Producer(queueMessage)
+		go func(msgQeue amqp091.Delivery) {
+			notif, err := adaptQueueMessageFromNotifyQueue(msgQeue)
 			if err != nil {
 				notifyLog.Errorf("failed to fetch queue message %v in a queue %s", err, c.queueUrl)
-				continue
+				return
+			}
+			notifyLog.AddTraceRef(fmt.Sprintf("AssociationsId: %+v", notif.AssociationsId))
+			notifyLog.AddTraceRef(fmt.Sprintf("Event: %+v", notif.Event))
+
+			subscriptions := []entity.Subscription{}
+			subscriptionsFiltered := []dto.SubscriptionDTO{}
+
+			for _, associationId := range notif.AssociationsId {
+				newSubsciptions, err := c.dynamo.GetSubscriptionByAssociationIdAndEvent(associationId, notif.Event)
+				if err != nil && err == infra.ErrorSubscriptinEventNotFound {
+					notifyLog.Errorf("Subscription with AssociationId %s and Event %s not found", associationId, notif.Event)
+					return
+				}
+
+				if err != nil {
+					notifyLog.Errorln(err.Error())
+					return
+				}
+
+				subscriptions = append(subscriptions, newSubsciptions...)
 			}
 
-		}
+			for _, subscription := range subscriptions {
+				if duplicated := utils.VerifyIfUrlIsDuplicated(subscriptionsFiltered, subscription.SubscriptionUrl, subscription.SubscriptionEvent); !duplicated {
+					subscriptionsFiltered = append(subscriptionsFiltered, dto.SubscriptionDTO{
+						AssociationId:     subscription.AssociationId,
+						ClientId:          subscription.ClientId,
+						AuthProvider:      "",
+						SubscriptionUrl:   subscription.SubscriptionUrl,
+						SubscriptionEvent: subscription.SubscriptionEvent,
+						CreatedAt:         notif.CreatedAt,
+					})
+				}
+			}
 
-		time.Sleep(c.pollInterval)
+			for _, subscription := range subscriptionsFiltered {
+				notif.Data["topic"] = subscription.SubscriptionEvent
+				notif.Data["created_at"] = subscription.CreatedAt
+				queueMessage := dto.QueueMessage{
+					ClientId:      subscription.ClientId,
+					AssociationId: subscription.AssociationId,
+					Url:           subscription.SubscriptionUrl,
+					AuthProvider:  subscription.AuthProvider,
+					Body:          notif.Data,
+				}
+				notifyLog.Infof("Sending to qeueue: %+v", queueMessage)
+				err = c.rabbitMqClient.Producer(queueMessage)
+				if err != nil {
+					notifyLog.Errorf("failed to fetch queue message %v in a queue %s", err, c.queueUrl)
+					continue
+				}
+
+			}
+		}(msg)
+
 	}
 }
 
-func (c *SQSConsumer) handleMessage(queueMessage *dto.QueueMessage, wg *sync.WaitGroup, semaphore *chan struct{}) {
+func (c *SQSConsumer) handleMessage(queueMessage *dto.QueueMessage, wg *sync.WaitGroup) {
 	handleMessageLog := c.logManager.NewLogger("logger handle message - ", os.Getenv("MACHINE_IP"))
 	consumeMessage := ConsumerMessage{
 		handleChannel: c.handle,
@@ -218,10 +211,9 @@ func (c *SQSConsumer) handleMessage(queueMessage *dto.QueueMessage, wg *sync.Wai
 	}
 
 	wg.Done()
-	<-*semaphore
 }
 
-func (c *SQSConsumer) handleError(errorMessage *ErrorMessage, wg *sync.WaitGroup, semaphore *chan struct{}) {
+func (c *SQSConsumer) handleError(errorMessage *ErrorMessage, wg *sync.WaitGroup) {
 	handleErrorLog := c.logManager.NewLogger("logger handle error - ", os.Getenv("MACHINE_IP"))
 	handleErrorLog.AddTraceRef(fmt.Sprintf("ClientId: %s", errorMessage.SourceMessage.ClientId))
 	handleErrorLog.AddTraceRef(fmt.Sprintf("AssociationId: %s", errorMessage.SourceMessage.AssociationId))
@@ -238,7 +230,6 @@ func (c *SQSConsumer) handleError(errorMessage *ErrorMessage, wg *sync.WaitGroup
 
 	fmt.Printf("Error to process message: %+v\n", errorMessage)
 	wg.Done()
-	<-*semaphore
 }
 
 func adaptQueueMessage(message amqp091.Delivery) (dto.QueueMessage, error) {
