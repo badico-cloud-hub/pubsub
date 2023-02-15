@@ -75,7 +75,7 @@ func NewSQSConsumer(queueUrl, dlq string, sqsClient *sqs.SQS, consumer ConsumerH
 func (c *SQSConsumer) Init(wg *sync.WaitGroup) {
 	wg.Add(3)
 	go c.initChannels(wg)
-	go c.notify()
+	go c.notify(wg)
 	go c.consume()
 }
 
@@ -114,7 +114,7 @@ func (c *SQSConsumer) consume() {
 
 }
 
-func (c *SQSConsumer) notify() {
+func (c *SQSConsumer) notify(wg *sync.WaitGroup) {
 	notifyLog := c.logManager.NewLogger("logger consumer queue - ", os.Getenv("MACHINE_IP"))
 	notifyLog.Infoln("Start consume notify queue...")
 
@@ -124,7 +124,9 @@ func (c *SQSConsumer) notify() {
 	}
 
 	for msg := range msgs {
-		go func(msgQeue amqp091.Delivery) {
+		wg.Add(1)
+		go func(msgQeue amqp091.Delivery, wg *sync.WaitGroup) {
+			defer wg.Done()
 			notif, err := adaptQueueMessageFromNotifyQueue(msgQeue)
 			if err != nil {
 				notifyLog.Errorf("failed to fetch queue message %v in a queue %s", err, c.queueUrl)
@@ -182,7 +184,7 @@ func (c *SQSConsumer) notify() {
 				}
 
 			}
-		}(msg)
+		}(msg, wg)
 
 	}
 }
