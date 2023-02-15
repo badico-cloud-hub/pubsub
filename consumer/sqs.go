@@ -123,9 +123,12 @@ func (c *SQSConsumer) notify(wg *sync.WaitGroup) {
 		notifyLog.Errorf("failed to fetch queue message %v in a queue %s", err, c.queueUrl)
 	}
 
+	semaphore := make(chan struct{}, 500)
+
 	for msg := range msgs {
 		wg.Add(1)
-		go func(msgQeue amqp091.Delivery, wg *sync.WaitGroup) {
+		semaphore <- struct{}{}
+		go func(msgQeue amqp091.Delivery, wg *sync.WaitGroup, semaphore *chan struct{}) {
 			defer wg.Done()
 			notif, err := adaptQueueMessageFromNotifyQueue(msgQeue)
 			if err != nil {
@@ -184,7 +187,8 @@ func (c *SQSConsumer) notify(wg *sync.WaitGroup) {
 				}
 
 			}
-		}(msg, wg)
+			<-*semaphore
+		}(msg, wg, &semaphore)
 
 	}
 }
