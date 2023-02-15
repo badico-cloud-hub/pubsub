@@ -36,11 +36,18 @@ func (r *RabbitMQ) Setup() error {
 	if err != nil {
 		return err
 	}
-	channel, err := connection.Channel()
+	pusubChannel, err := connection.Channel()
+	notifyChannel, err := connection.Channel()
 	if err != nil {
 		return err
 	}
-	q, err := channel.QueueDeclare(
+	if err := pusubChannel.Qos(500, 0, false); err != nil {
+		return err
+	}
+	if err := notifyChannel.Qos(500, 0, false); err != nil {
+		return err
+	}
+	q, err := pusubChannel.QueueDeclare(
 		"pubsub", // name
 		true,     // durable
 		false,    // delete when unused
@@ -53,7 +60,7 @@ func (r *RabbitMQ) Setup() error {
 		return err
 	}
 
-	qd, err := channel.QueueDeclare(
+	qd, err := pusubChannel.QueueDeclare(
 		"pubsub_dlq", // name
 		true,         // durable
 		false,        // delete when unused
@@ -62,7 +69,7 @@ func (r *RabbitMQ) Setup() error {
 		nil,          // arguments
 	)
 
-	qn, err := channel.QueueDeclare(
+	qn, err := notifyChannel.QueueDeclare(
 		"pubsub_service_notify", // name
 		true,                    // durable
 		false,                   // delete when unused
@@ -76,7 +83,7 @@ func (r *RabbitMQ) Setup() error {
 	}
 
 	r.conn = connection
-	r.ch = channel
+	r.ch = pusubChannel
 	r.queue = q
 	r.queueDlq = qd
 	r.queueNotify = qn
