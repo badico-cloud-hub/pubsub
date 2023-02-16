@@ -16,6 +16,7 @@ type RabbitMQ struct {
 	url         string
 	conn        *amqp.Connection
 	ch          *amqp.Channel
+	chNotify    *amqp.Channel
 	queue       amqp.Queue
 	queueDlq    amqp.Queue
 	queueNotify amqp.Queue
@@ -36,11 +37,16 @@ func (r *RabbitMQ) Setup() error {
 	if err != nil {
 		return err
 	}
-	channel, err := connection.Channel()
+	pubsubChannel, err := connection.Channel()
 	if err != nil {
 		return err
 	}
-	q, err := channel.QueueDeclare(
+	notifyChannel, err := connection.Channel()
+	if err != nil {
+		return err
+	}
+
+	q, err := pubsubChannel.QueueDeclare(
 		"pubsub", // name
 		true,     // durable
 		false,    // delete when unused
@@ -53,7 +59,7 @@ func (r *RabbitMQ) Setup() error {
 		return err
 	}
 
-	qd, err := channel.QueueDeclare(
+	qd, err := pubsubChannel.QueueDeclare(
 		"pubsub_dlq", // name
 		true,         // durable
 		false,        // delete when unused
@@ -61,8 +67,11 @@ func (r *RabbitMQ) Setup() error {
 		false,        // no-wait
 		nil,          // arguments
 	)
+	if err != nil {
+		return err
+	}
 
-	qn, err := channel.QueueDeclare(
+	qn, err := notifyChannel.QueueDeclare(
 		"pubsub_service_notify", // name
 		true,                    // durable
 		false,                   // delete when unused
@@ -76,7 +85,8 @@ func (r *RabbitMQ) Setup() error {
 	}
 
 	r.conn = connection
-	r.ch = channel
+	r.ch = pubsubChannel
+	r.chNotify = notifyChannel
 	r.queue = q
 	r.queueDlq = qd
 	r.queueNotify = qn
@@ -155,7 +165,7 @@ func (r *RabbitMQ) ProducerNotify(notify dto.NotifierDTO) error {
 	if err != nil {
 		return err
 	}
-	if err := r.ch.PublishWithContext(
+	if err := r.chNotify.PublishWithContext(
 		ctx,
 		"",
 		r.queueNotify.Name,
@@ -190,7 +200,7 @@ func (r *RabbitMQ) Consumer() (<-chan amqp.Delivery, error) {
 }
 
 func (r *RabbitMQ) ConsumerNotifyQueue() (<-chan amqp.Delivery, error) {
-	msgs, err := r.ch.Consume(
+	msgs, err := r.chNotify.Consume(
 		r.queueNotify.Name, // queue
 		"",                 // consumer
 		true,               // auto-ack

@@ -1,9 +1,11 @@
 package consumer
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/badico-cloud-hub/log-driver/producer"
 	"github.com/go-resty/resty/v2"
@@ -37,8 +39,10 @@ func (h *NotifyEventHandler) Handle(message ConsumerMessage) (map[string]interfa
 		handleLog.Infoln("END")
 	}()
 
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
 	request := resty.New().R()
-
+	request.SetContext(ctx)
 	if message.QueueMessage.Retries > retriesNumber {
 		return nil, errors.New("To many retries")
 	}

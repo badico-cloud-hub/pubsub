@@ -80,3 +80,11 @@ type AdminObject struct {
 	ClientId string `json:"client_id"`
 	ApiKey   string `json:"api_key"`
 }
+
+type ErrorMessage struct {
+	Source        string                 `json:"source,omitempty"`
+	Input         map[string]interface{} `json:"input,omitempty"`
+	Reason        string                 `json:"reason"`
+	Output        map[string]interface{} `json:"output,omitempty"`
+	SourceMessage *QueueMessage          `json:"-"`
+}
