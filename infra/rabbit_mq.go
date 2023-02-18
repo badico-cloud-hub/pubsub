@@ -47,12 +47,12 @@ func (r *RabbitMQ) Setup() error {
 	}
 
 	q, err := pubsubChannel.QueueDeclare(
-		"pubsub", // name
-		true,     // durable
-		false,    // delete when unused
-		false,    // exclusive
-		false,    // no-wait
-		nil,      // arguments
+		os.Getenv("QUEUE_PUBSUB"), // name
+		true,                      // durable
+		false,                     // delete when unused
+		false,                     // exclusive
+		false,                     // no-wait
+		nil,                       // arguments
 	)
 
 	if err != nil {
@@ -60,24 +60,24 @@ func (r *RabbitMQ) Setup() error {
 	}
 
 	qd, err := pubsubChannel.QueueDeclare(
-		"pubsub_dlq", // name
-		true,         // durable
-		false,        // delete when unused
-		false,        // exclusive
-		false,        // no-wait
-		nil,          // arguments
+		os.Getenv("QUEUE_PUBSUB_DLQ"), // name
+		true,                          // durable
+		false,                         // delete when unused
+		false,                         // exclusive
+		false,                         // no-wait
+		nil,                           // arguments
 	)
 	if err != nil {
 		return err
 	}
 
 	qn, err := notifyChannel.QueueDeclare(
-		"pubsub_service_notify", // name
-		true,                    // durable
-		false,                   // delete when unused
-		false,                   // exclusive
-		false,                   // no-wait
-		nil,                     // arguments
+		os.Getenv("QUEUE_NOTIFY"), // name
+		true,                      // durable
+		false,                     // delete when unused
+		false,                     // exclusive
+		false,                     // no-wait
+		nil,                       // arguments
 	)
 
 	if err != nil {
