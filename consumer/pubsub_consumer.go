@@ -130,15 +130,16 @@ func (p *PubsubConsumer) getSubscriptions(notif dto.NotifierDTO, wg *sync.WaitGr
 	subscriptions := []entity.Subscription{}
 	subscriptionsFiltered := []dto.SubscriptionDTO{}
 	for _, associationId := range notif.AssociationsId {
+		cacheKey := fmt.Sprintf("%s-%s", associationId, notif.Event)
 		fmt.Printf("CACHE INITIAL: %+v\n", p.cache)
-		newSubsciptions := p.cache[associationId]
+		newSubsciptions := p.cache[cacheKey]
 		if newSubsciptions != nil {
 			fmt.Printf("COM CACHE\n")
 			subscriptions = append(subscriptions, newSubsciptions...)
 		} else {
 			fmt.Printf("SEM CACHE\n")
 			newSubsciptions, err := p.dynamo.GetSubscriptionByAssociationIdAndEvent(associationId, notif.Event)
-			p.cache[associationId] = newSubsciptions
+			p.cache[cacheKey] = newSubsciptions
 			subscriptions = append(subscriptions, newSubsciptions...)
 			if err != nil && err == infra.ErrorSubscriptinEventNotFound {
 				fmt.Printf("Subscription with AssociationId %s and Event %s not found\n", associationId, notif.Event)
