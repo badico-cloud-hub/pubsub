@@ -33,7 +33,9 @@ func NewNotifyEventHandler(logManager *producer.LoggerManager) *NotifyEventHandl
 
 func (h *NotifyEventHandler) Handle(message ConsumerMessage) (map[string]interface{}, error) {
 	handleLog := h.logManager.NewLogger("logger handle function- ", os.Getenv("MACHINE_IP"))
-	handleLog.Infoln("START")
+	handleLog.Infoln("=======================================")
+	handleLog.Infoln("START HANDLE MESSAGE")
+	handleLog.Infoln("=======================================")
 	retriesNumber := 3
 	defer func() {
 		handleLog.Infoln("END")
@@ -50,6 +52,7 @@ func (h *NotifyEventHandler) Handle(message ConsumerMessage) (map[string]interfa
 	handleLog.AddTraceRef(fmt.Sprintf("ClientID = %s", message.QueueMessage.ClientId))
 	handleLog.AddTraceRef(fmt.Sprintf("URL = %s", message.QueueMessage.Url))
 	handleLog.AddTraceRef(fmt.Sprintf("EventName = %s", message.QueueMessage.Body["topic"]))
+	handleLog.AddTraceRef(fmt.Sprintf("CashinId = %s", message.QueueMessage.Body["cashin_id"]))
 	handleLog.AddTraceRef(fmt.Sprintf("CreatedAt = %s", message.QueueMessage.Body["created_at"]))
 
 	if message.QueueMessage.AuthProvider != "" {
@@ -65,18 +68,24 @@ func (h *NotifyEventHandler) Handle(message ConsumerMessage) (map[string]interfa
 		request.SetHeader("token", "token")
 	}
 
-	handleLog.Infoln("Making Request...")
+	handleLog.Infoln("=======================================")
+	handleLog.Infof("Making Request in %s with the message queue: %+v\n", time.Now().Format("2006-01-02T15:04:05.000"), *message.QueueMessage)
+	handleLog.Infoln("=======================================")
 	fmt.Printf("QueueMessage: %+v\n", *message.QueueMessage)
 	resp, err := request.SetBody(message.QueueMessage.Body).Post(message.QueueMessage.Url)
 
 	if err != nil || resp.StatusCode() < 200 || resp.StatusCode() > 299 {
-		fmt.Printf("ClientId: %+v, Retries: %+v\n", message.QueueMessage.ClientId, message.QueueMessage.Retries)
+		handleLog.Infoln("=======================================")
+		handleLog.Infof("ClientId: %+v, Retries: %+v\n", message.QueueMessage.ClientId, message.QueueMessage.Retries)
+		handleLog.Infoln("=======================================")
 		message.QueueMessage.Retries++
 		message.handleChannel <- message.QueueMessage
 		return nil, nil
 	}
 
-	handleLog.Infof("StatusCode = %s", resp.StatusCode())
+	handleLog.Infoln("=======================================")
+	handleLog.Infof("StatusCode = %s\n", resp.StatusCode())
+	handleLog.Infoln("=======================================")
 	fmt.Println("StatusCode = ", resp.StatusCode())
 
 	return nil, nil
