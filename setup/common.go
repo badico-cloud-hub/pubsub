@@ -17,7 +17,8 @@ func SetupNotifyEventConsumer(sqs *sqs.SQS, wg *sync.WaitGroup, logManager *prod
 	if err := dynamoClient.Setup(); err != nil {
 		setupLog.Errorln(err.Error())
 	}
-	consumer, err := consumer.NewPubsubConsumer(consumer.NewNotifyEventHandler(logManager), logManager, dynamoClient)
+	rabbitMqClient := infra.NewRabbitMQ()
+	consumer, err := consumer.NewPubsubConsumer(consumer.NewNotifyEventHandler(logManager, rabbitMqClient), logManager, dynamoClient, rabbitMqClient)
 	if err != nil {
 		log.Fatal(err)
 	}

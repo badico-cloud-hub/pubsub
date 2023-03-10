@@ -26,11 +26,10 @@ type PubsubConsumer struct {
 	cache      map[string][]entity.Subscription
 }
 
-func NewPubsubConsumer(consumer ConsumerHandler, logManager *producer.LoggerManager, dynamoClient *infra.DynamodbClient) (*PubsubConsumer, error) {
+func NewPubsubConsumer(consumer ConsumerHandler, logManager *producer.LoggerManager, dynamoClient *infra.DynamodbClient, rabbitMqClient *infra.RabbitMQ) (*PubsubConsumer, error) {
 	err := make(chan *dto.ErrorMessage)
 	handle := make(chan *dto.QueueMessage)
 	subs := make(chan dto.NotifierDTO, 5)
-	rabbitMqClient := infra.NewRabbitMQ()
 	cacheClient := make(map[string][]entity.Subscription)
 	if err := rabbitMqClient.Setup(); err != nil {
 		return &PubsubConsumer{}, err
@@ -171,6 +170,7 @@ func (p *PubsubConsumer) getSubscriptions(notif dto.NotifierDTO, wg *sync.WaitGr
 			AssociationId: subscription.AssociationId,
 			Url:           subscription.SubscriptionUrl,
 			AuthProvider:  subscription.AuthProvider,
+			Callback:      notif.Callback,
 			Body:          notif.Data,
 		}
 		fmt.Printf("Sending to qeueue: %+v\n", queueMessage)
