@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"testing"
+	"time"
 
 	"github.com/badico-cloud-hub/pubsub/dto"
 	"github.com/badico-cloud-hub/pubsub/infra"
@@ -225,16 +226,55 @@ func TestProducerNotify(t *testing.T) {
 	if err := rabbit.Setup(); err != nil {
 		t.Errorf("TestProducer: expect(nil) - got(%s)\n", err.Error())
 	}
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 1; i++ {
 		fmt.Printf("send: %v\n", i)
 		notify := dto.NotifierDTO{
 			Event:          "pix.cashin.created",
-			AssociationsId: []string{"edassociation@myassociation"},
-			Data:           make(map[string]interface{}),
+			AssociationsId: []string{"association@myassociation"},
+			Callback: map[string]interface{}{
+				"type": "queue.rabbitmq",
+			},
+			Data: map[string]interface{}{
+				"topic":     "pix.cashin.created",
+				"cashin_id": "",
+			},
 		}
 
 		if err := rabbit.ProducerNotify(notify); err != nil {
 			t.Errorf("TestProducer: expect(nil) - got(%s)\n", err.Error())
+		}
+	}
+
+	rabbit.Release()
+}
+
+func TestProducerCallback(t *testing.T) {
+	if err := godotenv.Load("../.env"); err != nil {
+		t.Errorf("TestProducerCallback: expect(nil) - got(%s)\n", err.Error())
+	}
+	rabbit := infra.NewRabbitMQ()
+	if rabbit == nil {
+		t.Errorf("TestProducerCallback: expect(!nil) - got(nil)\n")
+	}
+	if err := rabbit.Setup(); err != nil {
+		t.Errorf("TestProducerCallback: expect(nil) - got(%s)\n", err.Error())
+	}
+	for i := 0; i < 1; i++ {
+		fmt.Printf("send: %v\n", i)
+		callbackMessage := dto.CallbackMessage{
+			Event:           "pix.cashin.created",
+			Payload:         map[string]interface{}{},
+			ClientId:        "edson@junior",
+			CashinId:        "",
+			DeliveredStatus: "SUCCESS",
+			DeliveredAt:     time.Now().Format("2006-01-02 15:04:05"),
+			DeliveredUrl:    "google.com",
+			ErrorMessage:    "",
+			StatusCode:      200,
+		}
+
+		if err := rabbit.ProducerCallback(callbackMessage); err != nil {
+			t.Errorf("TestProducerCallback: expect(nil) - got(%s)\n", err.Error())
 		}
 	}
 
