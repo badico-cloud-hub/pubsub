@@ -20,6 +20,7 @@ type QueueMessage struct {
 	AuthProvider  string                 `json:"auth_provider,omitempty"`
 	AssociationId string                 `json:"association_id,omitempty"`
 	Retries       int                    `json:"retries,omitempty"`
+	Callback      map[string]interface{} `json:"callback,omitempty"`
 	Body          map[string]interface{} `json:"body"`
 }
 
@@ -43,7 +44,21 @@ type NotifierDTO struct {
 	Url            string                 `json:"url,omitempty"`
 	Data           map[string]interface{} `json:"data,omitempty"`
 	AssociationsId []string               `json:"associations_id,omitempty"`
+	Callback       map[string]interface{} `json:"callback,omitempty"`
 	CreatedAt      string                 `json:"createdAt,omitempty"`
+}
+
+//CallbackMessage is struct for callback message
+type CallbackMessage struct {
+	Event           string                 `json:"event,omitempty"`
+	Payload         map[string]interface{} `json:"payload,omitempty"`
+	ClientId        string                 `json:"client_id,omitempty"`
+	CashinId        string                 `json:"cashin_id,omitempty"`
+	DeliveredStatus string                 `json:"delivered_status,omitempty"`
+	DeliveredAt     string                 `json:"delivered_at,omitempty"`
+	DeliveredUrl    string                 `json:"delivered_url,omitempty"`
+	ErrorMessage    string                 `json:"error_message,omitempty"`
+	StatusCode      int                    `json:"status_code,omitempty"`
 }
 
 //ServiceDTO is struct for dto the service
