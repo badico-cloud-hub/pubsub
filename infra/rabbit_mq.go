@@ -13,13 +13,15 @@ import (
 
 //RabbitMQ is struct for broker in amazon mq
 type RabbitMQ struct {
-	url         string
-	conn        *amqp.Connection
-	ch          *amqp.Channel
-	chNotify    *amqp.Channel
-	queue       amqp.Queue
-	queueDlq    amqp.Queue
-	queueNotify amqp.Queue
+	url           string
+	conn          *amqp.Connection
+	ch            *amqp.Channel
+	chNotify      *amqp.Channel
+	chCallback    *amqp.Channel
+	queue         amqp.Queue
+	queueDlq      amqp.Queue
+	queueNotify   amqp.Queue
+	queueCallback amqp.Queue
 }
 
 //NewRabbitMQ return new instance of RabbitMQ
@@ -42,6 +44,10 @@ func (r *RabbitMQ) Setup() error {
 		return err
 	}
 	notifyChannel, err := connection.Channel()
+	if err != nil {
+		return err
+	}
+	callbackChannel, err := connection.Channel()
 	if err != nil {
 		return err
 	}
@@ -79,17 +85,27 @@ func (r *RabbitMQ) Setup() error {
 		false,                     // no-wait
 		nil,                       // arguments
 	)
-
 	if err != nil {
 		return err
 	}
 
+	qc, err := notifyChannel.QueueDeclare(
+		os.Getenv("QUEUE_CALLBACK"), // name
+		true,                        // durable
+		false,                       // delete when unused
+		false,                       // exclusive
+		false,                       // no-wait
+		nil,                         // arguments
+	)
+
 	r.conn = connection
 	r.ch = pubsubChannel
 	r.chNotify = notifyChannel
+	r.chCallback = callbackChannel
 	r.queue = q
 	r.queueDlq = qd
 	r.queueNotify = qn
+	r.queueCallback = qc
 	return nil
 }
 
@@ -169,6 +185,31 @@ func (r *RabbitMQ) ProducerNotify(notify dto.NotifierDTO) error {
 		ctx,
 		"",
 		r.queueNotify.Name,
+		false,
+		false,
+		amqp.Publishing{
+			Timestamp: time.Now(),
+			Type:      "text/plain",
+			Body:      notifyBytes,
+		}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+//ProducerCallback is send message to callback queue
+func (r *RabbitMQ) ProducerCallback(callbackMessage dto.CallbackMessage) error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	notifyBytes, err := json.Marshal(callbackMessage)
+	if err != nil {
+		return err
+	}
+	if err := r.chCallback.PublishWithContext(
+		ctx,
+		"",
+		r.queueCallback.Name,
 		false,
 		false,
 		amqp.Publishing{
