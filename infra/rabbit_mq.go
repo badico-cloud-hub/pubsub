@@ -122,6 +122,19 @@ func (r *RabbitMQ) NumberOfMessagesQueue() error {
 	fmt.Printf("%s: contains -> %v\n", r.queueDlq.Name, r.queueDlq.Messages)
 	return nil
 }
+func (r *RabbitMQ) ConnectionIsClosed() bool {
+	return r.conn.IsClosed()
+}
+
+func (r *RabbitMQ) ChannelNotifyIsClosed() bool {
+	return r.chNotify.IsClosed()
+}
+func (r *RabbitMQ) ChannelPubSubIsClosed() bool {
+	return r.ch.IsClosed()
+}
+func (r *RabbitMQ) ChannelCallbackIsClosed() bool {
+	return r.chCallback.IsClosed()
+}
 
 //Producer is send message to broker
 func (r *RabbitMQ) Producer(queueMessage dto.QueueMessage) error {
