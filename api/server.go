@@ -2,11 +2,13 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/badico-cloud-hub/log-driver/logger"
 	"github.com/badico-cloud-hub/log-driver/producer"
@@ -80,7 +82,29 @@ func (s *Server) Run() error {
 	return nil
 }
 
+//verifyConnections execute panic if connections is closed
+func (s *Server) verifyConnections() {
+	t := time.NewTicker(time.Second * 1)
+	for {
+		select {
+		case <-t.C:
+			connectionIsClosed := s.RabbitMQClient.ConnectionIsClosed()
+			if connectionIsClosed {
+				panic(errors.New("connection is closed"))
+			}
+			pubsubIsClosed := s.RabbitMQClient.ChannelPubSubIsClosed()
+			if pubsubIsClosed {
+				panic(errors.New("channel pubsub is closed"))
+			}
+
+		default:
+			continue
+		}
+	}
+}
+
 func (s *Server) setup() error {
+	go s.verifyConnections()
 	if err := http.ListenAndServe(fmt.Sprintf(":%v", s.port), s.mux); err != nil {
 		return err
 	}
@@ -849,7 +873,6 @@ func (s *Server) notification(w http.ResponseWriter, r *http.Request) {
 		notificationLog.Errorln(err.Error())
 		return
 	}
-	return
 
 }
 
@@ -947,6 +970,5 @@ func (s *Server) testNotification(w http.ResponseWriter, r *http.Request) {
 		testNotificationLog.Errorln(err.Error())
 		return
 	}
-	return
 
 }
