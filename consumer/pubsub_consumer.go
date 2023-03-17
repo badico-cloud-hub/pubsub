@@ -2,10 +2,12 @@ package consumer
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/badico-cloud-hub/log-driver/producer"
 	"github.com/badico-cloud-hub/pubsub/dto"
@@ -206,7 +208,27 @@ func (p *PubsubConsumer) consumeServiceNotifyQueue(wg *sync.WaitGroup) {
 }
 
 func (p *PubsubConsumer) Consume(wg *sync.WaitGroup) {
+	t := time.NewTicker(time.Second * 4)
 	wg.Add(3)
 	go p.managerChannels(wg)
 	go p.consumeServiceNotifyQueue(wg)
+	for {
+		select {
+		case <-t.C:
+			connectionIsClosed := p.rabbit.ConnectionIsClosed()
+			if connectionIsClosed {
+				panic(errors.New("connection is closed"))
+			}
+			notifyIsClosed := p.rabbit.ChannelNotifyIsClosed()
+			if notifyIsClosed {
+				panic(errors.New("channel notify is closed"))
+			}
+			callbackIsClosed := p.rabbit.ChannelCallbackIsClosed()
+			if callbackIsClosed {
+				panic(errors.New("channel callback is closed"))
+			}
+		default:
+			continue
+		}
+	}
 }
