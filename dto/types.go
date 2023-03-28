@@ -48,12 +48,25 @@ type NotifierDTO struct {
 	CreatedAt      string                 `json:"createdAt,omitempty"`
 }
 
-//CallbackMessage is struct for callback message
-type CallbackMessage struct {
+//CallbackCashinMessage is struct for callback message
+type CallbackCashinMessage struct {
 	Event           string                 `json:"event,omitempty"`
 	Payload         map[string]interface{} `json:"payload,omitempty"`
 	ClientId        string                 `json:"client_id,omitempty"`
 	CashinId        string                 `json:"cashin_id,omitempty"`
+	DeliveredStatus string                 `json:"delivered_status,omitempty"`
+	DeliveredAt     string                 `json:"delivered_at,omitempty"`
+	DeliveredUrl    string                 `json:"delivered_url,omitempty"`
+	ErrorMessage    string                 `json:"error_message,omitempty"`
+	StatusCode      int                    `json:"status_code,omitempty"`
+}
+
+//CallbackCashinMessage is struct for callback message
+type CallbackCashoutMessage struct {
+	Event           string                 `json:"event,omitempty"`
+	Payload         map[string]interface{} `json:"payload,omitempty"`
+	ClientId        string                 `json:"client_id,omitempty"`
+	CashoutId       string                 `json:"cashout_id,omitempty"`
 	DeliveredStatus string                 `json:"delivered_status,omitempty"`
 	DeliveredAt     string                 `json:"delivered_at,omitempty"`
 	DeliveredUrl    string                 `json:"delivered_url,omitempty"`
