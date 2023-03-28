@@ -1,0 +1,30 @@
+name: verify-if-rebased
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+env:
+  GH_TOKEN: ${{ secrets.GH_TOKEN }}
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Verify if rebased
+        uses: badico-cloud-hub/pr-is-rebased@v1
+        id: verify
+        with:
+            gh-token: ${{ env.GH_TOKEN }}
+            reactive: true
+      - name: Get id Pr
+        run: echo ${{ steps.verify.outputs.pr-number }}
+      - name: Get is Rebased
+        run: echo ${{ steps.verify.outputs.rebased }}
