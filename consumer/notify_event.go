@@ -80,51 +80,97 @@ func (h *NotifyEventHandler) Handle(message ConsumerMessage) (map[string]interfa
 	resp, err := request.SetBody(message.QueueMessage.Body).Post(message.QueueMessage.Url)
 
 	callbackType := message.QueueMessage.Callback["type"].(string)
+	if _, ok := message.QueueMessage.Body["cashin_id"]; ok {
+		callbackMessage := dto.CallbackCashinMessage{
+			Event:           message.QueueMessage.Body["topic"].(string),
+			Payload:         message.QueueMessage.Body,
+			ClientId:        message.QueueMessage.ClientId,
+			CashinId:        message.QueueMessage.Body["cashin_id"].(string),
+			DeliveredStatus: "SUCCESS",
+			DeliveredAt:     time.Now().Format("2006-01-02T15:04:05.000"),
+			DeliveredUrl:    message.QueueMessage.Url,
+			ErrorMessage:    "",
+			StatusCode:      resp.StatusCode(),
+		}
 
-	callbackMessage := dto.CallbackMessage{
-		Event:           message.QueueMessage.Body["topic"].(string),
-		Payload:         message.QueueMessage.Body,
-		ClientId:        message.QueueMessage.ClientId,
-		CashinId:        message.QueueMessage.Body["cashin_id"].(string),
-		DeliveredStatus: "SUCCESS",
-		DeliveredAt:     time.Now().Format("2006-01-02T15:04:05.000"),
-		DeliveredUrl:    message.QueueMessage.Url,
-		ErrorMessage:    "",
-		StatusCode:      resp.StatusCode(),
-	}
+		if err != nil || resp.StatusCode() < 200 || resp.StatusCode() > 299 {
+			callbackMessage.DeliveredStatus = "ERROR"
+			callbackMessage.ErrorMessage = err.Error()
+			callbackMessage.StatusCode = resp.StatusCode()
+			handleLog.Infoln("=======================================")
+			handleLog.Infof("ClientId: %+v, Retries: %+v\n", message.QueueMessage.ClientId, message.QueueMessage.Retries)
+			handleLog.Infoln("=======================================")
+			if callbackType == "queue.rabbitmq" {
+				handleLog.Infoln("Notifing callback queue...")
+				err = h.rabbitMqClient.ProducerCashinCallback(callbackMessage)
+				if err != nil {
+					handleLog.Infof("Error sending callback message: %+v\n", err.Error())
+					return nil, err
+				}
+			}
+			message.QueueMessage.Retries++
+			message.handleChannel <- message.QueueMessage
+			return nil, nil
+		}
 
-	if err != nil || resp.StatusCode() < 200 || resp.StatusCode() > 299 {
-		callbackMessage.DeliveredStatus = "ERROR"
-		callbackMessage.ErrorMessage = err.Error()
-		callbackMessage.StatusCode = resp.StatusCode()
 		handleLog.Infoln("=======================================")
-		handleLog.Infof("ClientId: %+v, Retries: %+v\n", message.QueueMessage.ClientId, message.QueueMessage.Retries)
+		handleLog.Infof("StatusCode = %s\n", resp.StatusCode())
 		handleLog.Infoln("=======================================")
 		if callbackType == "queue.rabbitmq" {
 			handleLog.Infoln("Notifing callback queue...")
-			err = h.rabbitMqClient.ProducerCallback(callbackMessage)
+			err = h.rabbitMqClient.ProducerCashinCallback(callbackMessage)
 			if err != nil {
 				handleLog.Infof("Error sending callback message: %+v\n", err.Error())
 				return nil, err
 			}
 		}
-		message.QueueMessage.Retries++
-		message.handleChannel <- message.QueueMessage
-		return nil, nil
-	}
-
-	handleLog.Infoln("=======================================")
-	handleLog.Infof("StatusCode = %s\n", resp.StatusCode())
-	handleLog.Infoln("=======================================")
-	if callbackType == "queue.rabbitmq" {
-		handleLog.Infoln("Notifing callback queue...")
-		err = h.rabbitMqClient.ProducerCallback(callbackMessage)
-		if err != nil {
-			handleLog.Infof("Error sending callback message: %+v\n", err.Error())
-			return nil, err
+		fmt.Println("StatusCode = ", resp.StatusCode())
+	} else if _, ok := message.QueueMessage.Body["cashout_id"]; ok {
+		callbackMessage := dto.CallbackCashoutMessage{
+			Event:           message.QueueMessage.Body["topic"].(string),
+			Payload:         message.QueueMessage.Body,
+			ClientId:        message.QueueMessage.ClientId,
+			CashoutId:       message.QueueMessage.Body["cashout_id"].(string),
+			DeliveredStatus: "SUCCESS",
+			DeliveredAt:     time.Now().Format("2006-01-02T15:04:05.000"),
+			DeliveredUrl:    message.QueueMessage.Url,
+			ErrorMessage:    "",
+			StatusCode:      resp.StatusCode(),
 		}
+
+		if err != nil || resp.StatusCode() < 200 || resp.StatusCode() > 299 {
+			callbackMessage.DeliveredStatus = "ERROR"
+			callbackMessage.ErrorMessage = err.Error()
+			callbackMessage.StatusCode = resp.StatusCode()
+			handleLog.Infoln("=======================================")
+			handleLog.Infof("ClientId: %+v, Retries: %+v\n", message.QueueMessage.ClientId, message.QueueMessage.Retries)
+			handleLog.Infoln("=======================================")
+			if callbackType == "queue.rabbitmq" {
+				handleLog.Infoln("Notifing callback queue...")
+				err = h.rabbitMqClient.ProducerCashoutCallback(callbackMessage)
+				if err != nil {
+					handleLog.Infof("Error sending callback message: %+v\n", err.Error())
+					return nil, err
+				}
+			}
+			message.QueueMessage.Retries++
+			message.handleChannel <- message.QueueMessage
+			return nil, nil
+		}
+
+		handleLog.Infoln("=======================================")
+		handleLog.Infof("StatusCode = %s\n", resp.StatusCode())
+		handleLog.Infoln("=======================================")
+		if callbackType == "queue.rabbitmq" {
+			handleLog.Infoln("Notifing callback queue...")
+			err = h.rabbitMqClient.ProducerCashoutCallback(callbackMessage)
+			if err != nil {
+				handleLog.Infof("Error sending callback message: %+v\n", err.Error())
+				return nil, err
+			}
+		}
+		fmt.Println("StatusCode = ", resp.StatusCode())
 	}
-	fmt.Println("StatusCode = ", resp.StatusCode())
 
 	return nil, nil
 }
