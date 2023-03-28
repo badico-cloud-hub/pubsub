@@ -211,11 +211,36 @@ func (r *RabbitMQ) ProducerNotify(notify dto.NotifierDTO) error {
 	return nil
 }
 
-//ProducerCallback is send message to callback queue
-func (r *RabbitMQ) ProducerCallback(callbackMessage dto.CallbackMessage) error {
+//ProducerCashinCallback is send message to callback queue
+func (r *RabbitMQ) ProducerCashinCallback(callbackCashinMessage dto.CallbackCashinMessage) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
-	notifyBytes, err := json.Marshal(callbackMessage)
+	notifyBytes, err := json.Marshal(callbackCashinMessage)
+	if err != nil {
+		return err
+	}
+	if err := r.chCallback.PublishWithContext(
+		ctx,
+		"",
+		r.queueCallback.Name,
+		false,
+		false,
+		amqp.Publishing{
+			Timestamp: time.Now(),
+			Type:      "text/plain",
+			Body:      notifyBytes,
+		}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+//ProducerCashoutCallback is send message to callback queue
+func (r *RabbitMQ) ProducerCashoutCallback(callbackCashoutMessage dto.CallbackCashoutMessage) error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	notifyBytes, err := json.Marshal(callbackCashoutMessage)
 	if err != nil {
 		return err
 	}

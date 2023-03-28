@@ -261,7 +261,7 @@ func TestProducerCallback(t *testing.T) {
 	}
 	for i := 0; i < 1; i++ {
 		fmt.Printf("send: %v\n", i)
-		callbackMessage := dto.CallbackMessage{
+		callbackMessage := dto.CallbackCashinMessage{
 			Event:           "pix.cashin.created",
 			Payload:         map[string]interface{}{},
 			ClientId:        "edson@junior",
@@ -273,7 +273,7 @@ func TestProducerCallback(t *testing.T) {
 			StatusCode:      200,
 		}
 
-		if err := rabbit.ProducerCallback(callbackMessage); err != nil {
+		if err := rabbit.ProducerCashinCallback(callbackMessage); err != nil {
 			t.Errorf("TestProducerCallback: expect(nil) - got(%s)\n", err.Error())
 		}
 	}
