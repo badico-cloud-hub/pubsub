@@ -166,7 +166,6 @@ func (p *PubsubConsumer) getSubscriptions(notif dto.NotifierDTO, wg *sync.WaitGr
 
 	for _, subscription := range subscriptionsFiltered {
 		notif.Data["topic"] = subscription.SubscriptionEvent
-		notif.Data["created_at"] = subscription.CreatedAt
 		queueMessage := dto.QueueMessage{
 			ClientId:      subscription.ClientId,
 			AssociationId: subscription.AssociationId,

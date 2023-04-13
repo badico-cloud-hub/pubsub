@@ -58,7 +58,7 @@ func (h *NotifyEventHandler) Handle(message ConsumerMessage) (map[string]interfa
 	handleLog.AddTraceRef(fmt.Sprintf("URL = %s", message.QueueMessage.Url))
 	handleLog.AddTraceRef(fmt.Sprintf("EventName = %s", message.QueueMessage.Body["topic"]))
 	handleLog.AddTraceRef(fmt.Sprintf("CashinId = %s", message.QueueMessage.Body["cashin_id"]))
-	handleLog.AddTraceRef(fmt.Sprintf("CreatedAt = %s", message.QueueMessage.Body["created_at"]))
+	handleLog.AddTraceRef(fmt.Sprintf("CreatedAt = %s", time.Now().Format("2006-01-02T15:04:05.000")))
 
 	if message.QueueMessage.AuthProvider != "" {
 		// authProvider, _ := h.getAuthProvider(notifyEventMessageBody.AuthProvider)
