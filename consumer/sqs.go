@@ -190,6 +190,7 @@ func (c *SQSConsumer) notify(wg *sync.WaitGroup) {
 }
 
 func (c *SQSConsumer) handleMessage(queueMessage *dto.QueueMessage, wg *sync.WaitGroup) {
+	defer wg.Done()
 	handleMessageLog := c.logManager.NewLogger("logger handle message - ", os.Getenv("MACHINE_IP"))
 	consumeMessage := ConsumerMessage{
 		handleChannel: c.handle,
@@ -212,7 +213,7 @@ func (c *SQSConsumer) handleMessage(queueMessage *dto.QueueMessage, wg *sync.Wai
 		return
 	}
 
-	wg.Done()
+	
 }
 
 func (c *SQSConsumer) handleError(errorMessage *ErrorMessage, wg *sync.WaitGroup) {
