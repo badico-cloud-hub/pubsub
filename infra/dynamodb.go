@@ -69,6 +69,7 @@ func (d *DynamodbClient) CreateSubscription(subs *dto.SubscriptionDTO) (dto.Subs
 			subscription.SubscriptionId = id.String()
 			subscription.SubscriptionUrl = subs.Url
 			subscription.AssociationId = subs.AssociationId
+			subscription.Description = subs.Description
 			subscription.CreatedAt = time.Now().Format("2006-01-02 15:04:05")
 			subscription.UpdatedAt = time.Now().Format("2006-01-02 15:04:05")
 
@@ -138,6 +139,7 @@ func (d *DynamodbClient) ListSubscriptions(associationId string) ([]dto.Subscrip
 			subscription.SubscriptionUrl = sliceSubs[0].SubscriptionUrl
 			subscription.ClientId = sliceSubs[0].ClientId
 			subscription.AssociationId = sliceSubs[0].AssociationId
+			subscription.Description = sliceSubs[0].Description
 			for _, events := range sliceSubs {
 				subscription.Events = append(subscription.Events, events.SubscriptionEvent)
 			}
@@ -544,6 +546,7 @@ func (d *DynamodbClient) GetServicesEvents(serviceName, event string) (entity.Se
 	if err != nil {
 		return entity.Services{}, err
 	}
+	fmt.Printf("output: %+v\n", output)
 	services := []entity.Services{}
 	if err := dynamodbattribute.UnmarshalListOfMaps(output.Items, &services); err != nil {
 		return entity.Services{}, err
