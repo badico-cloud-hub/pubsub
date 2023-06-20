@@ -34,6 +34,7 @@ type SubscriptionDTO struct {
 	SubscriptionId    string   `json:"subscription_id,omitempty"`
 	SubscriptionEvent string   `json:"subscription_event,omitempty"`
 	AssociationId     string   `json:"association_id,omitempty"`
+	Description       string   `json:"description,omitempty"`
 	CreatedAt         string   `json:"createdAt,omitempty"`
 }
 
