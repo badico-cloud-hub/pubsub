@@ -245,8 +245,13 @@ func (s *Server) createSubscription(w http.ResponseWriter, r *http.Request) {
 		createSubscriptionLog.Errorln(err.Error())
 		return
 	}
-
-	client, _ := s.Dynamo.GetClientByApiKey(r.Header.Get("c-token"))
+	client, err := s.Dynamo.GetClientByApiKey(r.Header.Get("c-token"))
+	if err != nil {
+		createSubscriptionLog.Errorln(err.Error())
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
+		return
+	}
 	for _, event := range subs.Events {
 		subscriptionService := strings.Split(event, ".")[0]
 		_, err := s.Dynamo.GetServicesEvents(subscriptionService, event)
@@ -294,6 +299,7 @@ func (s *Server) listSubscriptions(w http.ResponseWriter, r *http.Request) {
 			Events:          sub.Events,
 			SubscriptionUrl: sub.SubscriptionUrl,
 			SubscriptionId:  sub.SubscriptionId,
+			Description:     sub.Description,
 		})
 	}
 	if err != nil {
@@ -744,6 +750,7 @@ func (s *Server) listClients(w http.ResponseWriter, r *http.Request) {
 			Identifier:    client.Identifier,
 			Service:       client.Service,
 			AssociationId: client.AssociationId,
+			Description:   client.Description,
 			CreatedAt:     client.CreatedAt,
 			UpdatedAt:     client.UpdatedAt,
 		}
