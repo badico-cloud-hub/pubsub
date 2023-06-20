@@ -100,6 +100,7 @@ type ClientDTO struct {
 	Identifier    string `json:"identifier,omitempty"`
 	Service       string `json:"service,omitempty"`
 	AssociationId string `json:"association_id,omitempty"`
+	Description   string `json:"description,omitempty"`
 	CreatedAt     string `json:"created_at,omitempty"`
 	UpdatedAt     string `json:"updated_at,omitempty"`
 }
