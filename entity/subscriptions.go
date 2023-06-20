@@ -11,6 +11,7 @@ type Subscription struct {
 	SubscriptionUrl   string `dynamodbav:"subscription_url,omitempty"`
 	SubscriptionId    string `dynamodbav:"subscription_id,omitempty"`
 	AssociationId     string `dynamodbav:"association_id,omitempty"`
+	Description       string `dynamodbav:"description,omitempty"`
 	CreatedAt         string `dynamodbav:"createdAt,omitempty"`
 	UpdatedAt         string `dynamodbav:"updatedAt,omitempty"`
 }
