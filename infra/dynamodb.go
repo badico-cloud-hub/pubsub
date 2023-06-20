@@ -251,6 +251,7 @@ func (d *DynamodbClient) CreateClients(client dto.ClientDTO) (string, error) {
 		Identifier:        client.Identifier,
 		Service:           client.Service,
 		AssociationId:     client.AssociationId,
+		Description:       client.Description,
 		CreatedAt:         time.Now().Format("2006-01-02 15:04:05"),
 		UpdatedAt:         time.Now().Format("2006-01-02 15:04:05"),
 	}
