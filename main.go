@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -29,6 +30,7 @@ func main() {
 	}()
 
 	if isServer {
+		fmt.Printf("RUNNING API PUBSUB\n")
 		port := os.Getenv("PORT")
 		api := api.NewServer(port)
 		api.LogManager = logManager
@@ -37,6 +39,7 @@ func main() {
 			log.Fatal(err)
 		}
 	} else {
+		fmt.Printf("RUNNING CONSUMER PUBSUB\n")
 		wg := &sync.WaitGroup{}
 		sqs := infra.NewSqsClient()
 		if err := sqs.Setup(); err != nil {

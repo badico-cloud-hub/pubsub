@@ -10,6 +10,7 @@ type Clients struct {
 	Service           string `dynamodbav:"service,omitempty"`
 	ApiKey            string `dynamodbav:"api_key,omitempty"`
 	AssociationId     string `dynamodbav:"association_id,omitempty"`
+	Description       string `dynamodbav:"description,omitempty"`
 	CreatedAt         string `dynamodbav:"createdAt,omitempty"`
 	UpdatedAt         string `dynamodbav:"updatedAt,omitempty"`
 }
