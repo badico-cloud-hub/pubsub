@@ -227,6 +227,28 @@ func TestCreateClients(t *testing.T) {
 	log.Printf("output: %+v\n", output)
 }
 
+func TestCreateScope(t *testing.T) {
+	if err := godotenv.Load("../.env"); err != nil {
+		t.Errorf("TestCreateScope: expect(nil) - got(%s)\n", err.Error())
+	}
+	dynamo := infra.NewDynamodbClient()
+	if err := dynamo.Setup(); err != nil {
+		t.Errorf("TestCreateScope: expect(nil) - got(%s)\n", err.Error())
+	}
+	scope := dto.ScopeDTO{
+		Identifier:    "teste@edson",
+		ApiKey:        "",
+		Scope:         "pix.cashin.create",
+		Provider:      "starkbank",
+		AssociationId: "association@teste",
+	}
+	err := dynamo.CreateScope(scope)
+	if err != nil {
+		t.Errorf("TestCreateScope: expect(nil) - got(%s)\n", err.Error())
+	}
+	// log.Printf("output: %+v\n", output)
+}
+
 func TestListClients(t *testing.T) {
 	if err := godotenv.Load("../.env"); err != nil {
 		t.Errorf("TestListClients: expect(nil) - got(%s)\n", err.Error())
