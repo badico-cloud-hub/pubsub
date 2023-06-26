@@ -641,19 +641,23 @@ func (s *Server) createClients(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: infra.ErrorClientAlreadyExist.Error()})
 		return
 	}
-	existService, _, err := s.Dynamo.ExistService(client.Service)
-	if err != nil {
-		createClientLog.Errorln(err.Error())
-		_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
-		return
-	}
-	if !existService {
-		createClientLog.Errorln(infra.ErrorServiceNotFound.Error())
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: infra.ErrorServiceNotFound.Error()})
-		return
-	}
 	apiKey, err := s.Dynamo.CreateClients(client)
+	for _, scope := range client.Scopes {
+		newScope := dto.ScopeDTO{
+			ApiKey:        apiKey,
+			Identifier:    client.Identifier,
+			Scope:         scope,
+			AssociationId: client.AssociationId,
+			Provider:      client.Provider,
+		}
+		err := s.Dynamo.CreateScope(newScope)
+		if err != nil {
+			createClientLog.Errorln(err.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
+			return
+		}
+	}
 	jsonToLog, _ := json.Marshal(client)
 	createClientLog.AddEvent(logger.LogEventEmbed{
 		Name: "CreateClient",
