@@ -11,6 +11,7 @@ type Clients struct {
 	ApiKey            string `dynamodbav:"api_key,omitempty"`
 	AssociationId     string `dynamodbav:"association_id,omitempty"`
 	Description       string `dynamodbav:"description,omitempty"`
+	Provider          string `dynamodbav:"provider,omitempty"`
 	CreatedAt         string `dynamodbav:"createdAt,omitempty"`
 	UpdatedAt         string `dynamodbav:"updatedAt,omitempty"`
 }
