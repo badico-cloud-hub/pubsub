@@ -252,6 +252,7 @@ func (d *DynamodbClient) CreateClients(client dto.ClientDTO) (string, error) {
 		Service:           client.Service,
 		AssociationId:     client.AssociationId,
 		Description:       client.Description,
+		Provider:          client.Provider,
 		CreatedAt:         time.Now().Format("2006-01-02 15:04:05"),
 		UpdatedAt:         time.Now().Format("2006-01-02 15:04:05"),
 	}
@@ -271,6 +272,41 @@ func (d *DynamodbClient) CreateClients(client dto.ClientDTO) (string, error) {
 		return "", err
 	}
 	return newApiKey, nil
+}
+
+//CreateScope execute creation the scopes in dynamo table
+func (d *DynamodbClient) CreateScope(scope dto.ScopeDTO) error {
+	id := uuid.New()
+	newScope := entity.Scopes{
+		PK:                fmt.Sprintf("API_KEY#%s", scope.ApiKey),
+		SK:                fmt.Sprintf("SCOPE#%s", scope.Scope),
+		INDEX_AUXILIAR_PK: fmt.Sprintf("CLIENT#%s", scope.Identifier),
+		INDEX_AUXILIAR_SK: fmt.Sprintf("SCOPE#%s", scope.Scope),
+		Identifier:        scope.Identifier,
+		Scope:             scope.Scope,
+		ApiKey:            scope.ApiKey,
+		Provider:          scope.Provider,
+		AssociationId:     scope.AssociationId,
+		ScopeId:           id.String(),
+		CreatedAt:         time.Now().Format("2006-01-02 15:04:05"),
+		UpdatedAt:         time.Now().Format("2006-01-02 15:04:05"),
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	putItem, err := dynamodbattribute.MarshalMap(newScope)
+	if err != nil {
+		return err
+	}
+	input := &dynamodb.PutItemInput{
+		TableName: aws.String(d.tableName),
+		Item:      putItem,
+	}
+	_, err = d.client.PutItemWithContext(ctx, input)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 //ListClients return all clients the table
