@@ -96,11 +96,25 @@ type ServiceEventsDTO struct {
 
 //ClientDTO is struct for dto the clients
 type ClientDTO struct {
+	ApiKey        string   `json:"api_key,omitempty"`
+	Identifier    string   `json:"identifier,omitempty"`
+	Service       string   `json:"service,omitempty"`
+	Scopes        []string `json:"scopes,omitempty"`
+	AssociationId string   `json:"association_id,omitempty"`
+	Description   string   `json:"description,omitempty"`
+	Provider      string   `json:"provider,omitempty"`
+	CreatedAt     string   `json:"created_at,omitempty"`
+	UpdatedAt     string   `json:"updated_at,omitempty"`
+}
+
+//ScopeDTO is struct for dto the scopes
+type ScopeDTO struct {
 	ApiKey        string `json:"api_key,omitempty"`
 	Identifier    string `json:"identifier,omitempty"`
-	Service       string `json:"service,omitempty"`
+	ScopeId       string `json:"scope_id,omitempty"`
+	Scope         string `json:"scope,omitempty"`
+	Provider      string `json:"provider,omitempty"`
 	AssociationId string `json:"association_id,omitempty"`
-	Description   string `json:"description,omitempty"`
 	CreatedAt     string `json:"created_at,omitempty"`
 	UpdatedAt     string `json:"updated_at,omitempty"`
 }
