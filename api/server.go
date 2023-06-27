@@ -647,6 +647,7 @@ func (s *Server) createClients(w http.ResponseWriter, r *http.Request) {
 			ApiKey:        apiKey,
 			Identifier:    client.Identifier,
 			Scope:         scope,
+			Service:       client.Service,
 			AssociationId: client.AssociationId,
 			Provider:      client.Provider,
 		}
