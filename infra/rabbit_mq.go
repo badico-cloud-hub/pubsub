@@ -137,7 +137,7 @@ func (r *RabbitMQ) ChannelCallbackIsClosed() bool {
 }
 
 //Producer is send message to broker
-func (r *RabbitMQ) Producer(queueMessage dto.QueueMessage) error {
+func (r *RabbitMQ) Producer(queueMessage dto.NotifierDTO) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 	queueMessageBytes, err := json.Marshal(queueMessage)

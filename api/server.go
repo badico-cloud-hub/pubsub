@@ -854,14 +854,7 @@ func (s *Server) notification(w http.ResponseWriter, r *http.Request) {
 	for _, subscription := range subscriptionsFiltered {
 		notif.Data["topic"] = subscription.SubscriptionEvent
 		notif.Data["created_at"] = subscription.CreatedAt
-		queueMessage := dto.QueueMessage{
-			ClientId:      subscription.ClientId,
-			AssociationId: subscription.AssociationId,
-			Url:           subscription.SubscriptionUrl,
-			AuthProvider:  subscription.AuthProvider,
-			Body:          notif.Data,
-		}
-		err := s.RabbitMQClient.Producer(queueMessage)
+		err := s.RabbitMQClient.ProducerNotify(notif)
 		if err != nil {
 			w.WriteHeader(http.StatusNotFound)
 			if err := json.NewEncoder(w).Encode(&respNotSubscriptions); err != nil {
@@ -943,14 +936,7 @@ func (s *Server) testNotification(w http.ResponseWriter, r *http.Request) {
 	for _, subscription := range subscriptionsFiltered {
 		notif.Data["topic"] = subscription.SubscriptionEvent
 		notif.Data["created_at"] = subscription.CreatedAt
-		queueMessage := dto.QueueMessage{
-			ClientId:      subscription.ClientId,
-			AssociationId: subscription.AssociationId,
-			Url:           subscription.SubscriptionUrl,
-			AuthProvider:  subscription.AuthProvider,
-			Body:          notif.Data,
-		}
-		err := s.RabbitMQClient.Producer(queueMessage)
+		err := s.RabbitMQClient.ProducerNotify(notif)
 		if err != nil {
 			w.WriteHeader(http.StatusNotFound)
 			if err := json.NewEncoder(w).Encode(&respNotSubscriptions); err != nil {
