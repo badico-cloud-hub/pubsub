@@ -286,6 +286,7 @@ func (d *DynamodbClient) CreateScope(scope dto.ScopeDTO) error {
 		Scope:             scope.Scope,
 		ApiKey:            scope.ApiKey,
 		Provider:          scope.Provider,
+		Service:           scope.Service,
 		AssociationId:     scope.AssociationId,
 		ScopeId:           id.String(),
 		CreatedAt:         time.Now().Format("2006-01-02 15:04:05"),
