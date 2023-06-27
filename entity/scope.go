@@ -10,6 +10,7 @@ type Scopes struct {
 	Scope             string `dynamodbav:"scope,omitempty"`
 	ApiKey            string `dynamodbav:"api_key,omitempty"`
 	ScopeId           string `dynamodbav:"scope_id,omitempty"`
+	Service           string `dynamodbav:"service,omitempty"`
 	Provider          string `dynamodbav:"provider,omitempty"`
 	AssociationId     string `dynamodbav:"association_id,omitempty"`
 	CreatedAt         string `dynamodbav:"createdAt,omitempty"`
