@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strconv"
 	"sync"
 	"time"
 
+	batterygo "github.com/badico-cloud-hub/battery-go/battery"
 	"github.com/badico-cloud-hub/log-driver/producer"
 	"github.com/badico-cloud-hub/pubsub/dto"
 	"github.com/badico-cloud-hub/pubsub/entity"
@@ -26,9 +28,10 @@ type PubsubConsumer struct {
 	logManager *producer.LoggerManager
 	dynamo     *infra.DynamodbClient
 	cache      map[string][]entity.Subscription
+	battery    *infra.Battery
 }
 
-func NewPubsubConsumer(consumer ConsumerHandler, logManager *producer.LoggerManager, dynamoClient *infra.DynamodbClient, rabbitMqClient *infra.RabbitMQ) (*PubsubConsumer, error) {
+func NewPubsubConsumer(consumer ConsumerHandler, logManager *producer.LoggerManager, dynamoClient *infra.DynamodbClient, rabbitMqClient *infra.RabbitMQ, battery *infra.Battery) (*PubsubConsumer, error) {
 	err := make(chan *dto.ErrorMessage)
 	handle := make(chan *dto.QueueMessage)
 	subs := make(chan dto.NotifierDTO, 5)
@@ -36,7 +39,6 @@ func NewPubsubConsumer(consumer ConsumerHandler, logManager *producer.LoggerMana
 	if err := rabbitMqClient.Setup(); err != nil {
 		return &PubsubConsumer{}, err
 	}
-
 	return &PubsubConsumer{
 		consumer:   consumer,
 		rabbit:     rabbitMqClient,
@@ -46,7 +48,24 @@ func NewPubsubConsumer(consumer ConsumerHandler, logManager *producer.LoggerMana
 		handle:     handle,
 		subs:       subs,
 		cache:      cacheClient,
+		battery:    battery,
 	}, nil
+}
+
+func (p *PubsubConsumer) updateBatteryStorage() []batterygo.BatteryArgument {
+
+	key := "pubsub"
+	p.cache = map[string][]entity.Subscription{}
+
+	fmt.Println("update pubsub storage: Key", key)
+	fmt.Println("update pubsub storage: Value", p.cache)
+
+	toStorage := batterygo.BatteryArgument{
+		Key:   key,
+		Value: p.cache,
+	}
+
+	return []batterygo.BatteryArgument{toStorage}
 }
 
 func (p *PubsubConsumer) managerChannels(wg *sync.WaitGroup) {
@@ -131,9 +150,14 @@ func (p *PubsubConsumer) getSubscriptions(notif dto.NotifierDTO, wg *sync.WaitGr
 	subscriptions := []entity.Subscription{}
 	subscriptionsFiltered := []dto.SubscriptionDTO{}
 	for _, associationId := range notif.AssociationsId {
+		fmt.Println("GET SUBS IN BATTERY CACHE")
+		dataCached, err := p.battery.Get("pubsub")
+		if err != nil {
+			fmt.Printf("Battery cache not found\n")
+		}
 		cacheKey := fmt.Sprintf("%s-%s", associationId, notif.Event)
 		fmt.Printf("CACHE INITIAL: %+v\n", p.cache)
-		newSubsciptions := p.cache[cacheKey]
+		newSubsciptions := dataCached.(map[string][]entity.Subscription)[cacheKey]
 		if newSubsciptions != nil {
 			fmt.Printf("COM CACHE\n")
 			subscriptions = append(subscriptions, newSubsciptions...)
@@ -141,6 +165,7 @@ func (p *PubsubConsumer) getSubscriptions(notif dto.NotifierDTO, wg *sync.WaitGr
 			fmt.Printf("SEM CACHE\n")
 			newSubsciptions, err := p.dynamo.GetSubscriptionByAssociationIdAndEvent(associationId, notif.Event)
 			p.cache[cacheKey] = newSubsciptions
+			p.battery.Set("pubsub", p.cache)
 			subscriptions = append(subscriptions, newSubsciptions...)
 			if err != nil && err == infra.ErrorSubscriptinEventNotFound {
 				fmt.Printf("Subscription with AssociationId %s and Event %s not found\n", associationId, notif.Event)
@@ -208,6 +233,15 @@ func (p *PubsubConsumer) consumeServiceNotifyQueue(wg *sync.WaitGroup) {
 
 func (p *PubsubConsumer) Consume(wg *sync.WaitGroup) {
 	t := time.NewTicker(time.Second * 4)
+	BATTERY_TIME := os.Getenv("BATTERY_TIME")
+	batteryTime, err := strconv.Atoi(BATTERY_TIME)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+	err = p.battery.Init(time.Duration(batteryTime), p.updateBatteryStorage)
+	if err != nil {
+		panic(errors.New("Error when init battery"))
+	}
 	wg.Add(3)
 	go p.managerChannels(wg)
 	go p.consumeServiceNotifyQueue(wg)
