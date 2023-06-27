@@ -114,6 +114,7 @@ type ScopeDTO struct {
 	ScopeId       string `json:"scope_id,omitempty"`
 	Scope         string `json:"scope,omitempty"`
 	Provider      string `json:"provider,omitempty"`
+	Service       string `json:"service,omitempty"`
 	AssociationId string `json:"association_id,omitempty"`
 	CreatedAt     string `json:"created_at,omitempty"`
 	UpdatedAt     string `json:"updated_at,omitempty"`
