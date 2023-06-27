@@ -153,12 +153,12 @@ func TestProducer(t *testing.T) {
 	}
 	for i := 0; i < 100; i++ {
 		fmt.Printf("send: %v\n", i)
-		queueMessage := dto.QueueMessage{
-			ClientId:      "id@ed",
-			Url:           "https://eo4ym5xeg1n1yqu.m.pipedream.net",
-			AuthProvider:  "",
-			AssociationId: "myassociation@association",
-			Body:          map[string]interface{}{},
+		queueMessage := dto.NotifierDTO{
+			ClientId:       "id@ed",
+			Url:            "https://eo4ym5xeg1n1yqu.m.pipedream.net",
+			Event:          "pix.cashin.created",
+			AssociationsId: []string{""},
+			Data:           map[string]interface{}{},
 		}
 
 		if err := rabbit.Producer(queueMessage); err != nil {
