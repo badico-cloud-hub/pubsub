@@ -177,7 +177,7 @@ func (c *SQSConsumer) notify(wg *sync.WaitGroup) {
 					Body:          notif.Data,
 				}
 				notifyLog.Infof("Sending to qeueue: %+v", queueMessage)
-				err = c.rabbitMqClient.Producer(queueMessage)
+				err = c.rabbitMqClient.Producer(notif)
 				if err != nil {
 					notifyLog.Errorf("failed to fetch queue message %v in a queue %s", err, c.queueUrl)
 					continue
