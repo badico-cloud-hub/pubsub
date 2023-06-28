@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/badico-cloud-hub/pubsub/dto"
+	"github.com/badico-cloud-hub/pubsub/helpers"
 	"github.com/badico-cloud-hub/pubsub/infra"
 	"github.com/badico-cloud-hub/pubsub/utils"
 )
@@ -38,26 +39,32 @@ func AuthorizeMiddleware(next http.Handler) http.Handler {
 		if err := dynamo.Setup(); err != nil {
 			log.Fatal(err)
 		}
-		headerApiKey := r.Header.Get("c-token")
-		if headerApiKey != "" {
-			client, err := dynamo.GetClientByApiKey(headerApiKey)
+
+		bearerToken := r.Header.Get("authorization")
+
+		if bearerToken != "" {
+			jwtDto, err := helpers.VerifyToken(bearerToken)
 			if err != nil {
+				logger.Error(err.Error())
 				w.WriteHeader(http.StatusForbidden)
-				if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "Not Authorized"}); err != nil {
+				if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "unalthorized"}); err != nil {
 					logger.Error(err.Error())
 				}
 				return
 			}
-			r.Header.Add("association-id", client.AssociationId)
-			r.Header.Add("client-id", client.Identifier)
+			r.Header.Add("client-id", jwtDto.Payload.ClientId)
+			r.Header.Add("association-id", jwtDto.Payload.AssociationId)
+			r.Header.Add("api-key-type", jwtDto.Payload.ApiKeyType)
+			r.Header.Add("scopes", jwtDto.Payload.Scopes)
 			next.ServeHTTP(w, r)
-		} else {
-			w.WriteHeader(http.StatusForbidden)
-			if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "Not Authorized"}); err != nil {
-				logger.Error(err.Error())
-				return
-			}
+			return
 		}
+		w.WriteHeader(http.StatusForbidden)
+		if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "unalthorized"}); err != nil {
+			logger.Error(err.Error())
+			return
+		}
+
 	})
 }
 
@@ -74,7 +81,7 @@ func AuthorizeMiddlewareByServiceApiKey(next http.Handler) http.Handler {
 			_, err := dynamo.GetServiceByApiKey(headerApiKey)
 			if err != nil {
 				w.WriteHeader(http.StatusForbidden)
-				if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "Not Authorized"}); err != nil {
+				if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "unalthorized"}); err != nil {
 					logger.Error(err.Error())
 				}
 				return
@@ -82,7 +89,7 @@ func AuthorizeMiddlewareByServiceApiKey(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		} else {
 			w.WriteHeader(http.StatusForbidden)
-			if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "Not Authorized"}); err != nil {
+			if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "unalthorized"}); err != nil {
 				logger.Error(err.Error())
 				return
 			}
@@ -101,7 +108,7 @@ func AuthorizeAdminMiddleware(next http.Handler) http.Handler {
 		if err != nil {
 			logger.Error(err.Error())
 			w.WriteHeader(http.StatusForbidden)
-			if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "Not Authorized"}); err != nil {
+			if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "unalthorized"}); err != nil {
 				logger.Error(err.Error())
 			}
 			return
@@ -112,7 +119,7 @@ func AuthorizeAdminMiddleware(next http.Handler) http.Handler {
 		if err := json.Unmarshal(adminApisKeysJson, &adminObjects); err != nil {
 			logger.Error(err.Error())
 			w.WriteHeader(http.StatusForbidden)
-			if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "Not Authorized"}); err != nil {
+			if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "unalthorized"}); err != nil {
 				logger.Error(err.Error())
 			}
 			return
@@ -127,9 +134,9 @@ func AuthorizeAdminMiddleware(next http.Handler) http.Handler {
 		}
 
 		w.WriteHeader(http.StatusForbidden)
-		if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "Not Authorized"}); err != nil {
+		if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "unalthorized"}); err != nil {
 			logger.Error(err.Error())
 		}
-		return
+
 	})
 }
