@@ -133,3 +133,19 @@ type ErrorMessage struct {
 	Output        map[string]interface{} `json:"output,omitempty"`
 	SourceMessage *QueueMessage          `json:"-"`
 }
+
+//JWTDto is struct for jwt claims
+type JWTDTO struct {
+	Exp     int           `json:"exp"`
+	Nbf     int           `json:"nbf"`
+	Iat     int           `json:"iat"`
+	Payload JWTDTOPayload `json:"payload"`
+}
+
+type JWTDTOPayload struct {
+	ClientId      string `json:"client_id"`
+	AssociationId string `json:"association_id"`
+	ApiKeyType    string `json:"api_key_type"`
+	Provider      string `json:"provider"`
+	Scopes        string `json:"scopes"`
+}

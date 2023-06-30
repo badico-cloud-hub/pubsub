@@ -240,18 +240,13 @@ func (s *Server) createSubscription(w http.ResponseWriter, r *http.Request) {
 		ClientId:      r.Header.Get("client-id"),
 		AssociationId: r.Header.Get("association-id"),
 	}
+	apiKeyType := r.Header.Get("api-key-type")
 	defer r.Body.Close()
 	if err := json.NewDecoder(r.Body).Decode(&subs); err != nil {
 		createSubscriptionLog.Errorln(err.Error())
 		return
 	}
-	client, err := s.Dynamo.GetClientByApiKey(r.Header.Get("c-token"))
-	if err != nil {
-		createSubscriptionLog.Errorln(err.Error())
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
-		return
-	}
+
 	for _, event := range subs.Events {
 		subscriptionService := strings.Split(event, ".")[0]
 		_, err := s.Dynamo.GetServicesEvents(subscriptionService, event)
@@ -261,9 +256,9 @@ func (s *Server) createSubscription(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
 			return
 		}
-		if client.Service != subscriptionService {
+		if apiKeyType != subscriptionService {
 			w.WriteHeader(http.StatusForbidden)
-			_ = json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "Not Authorized"})
+			_ = json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "unalthorized"})
 			return
 		}
 	}
