@@ -1,0 +1,267 @@
+name: deploy_consumers_cashout_docker
+
+on: 
+  workflow_dispatch:
+    inputs:
+      name:
+        type: choice
+        required: true
+        default: 'prod'
+        description: Deploy
+        options: 
+        - prod
+        - dev
+      tag:
+        description: Version
+        required: true
+        type: string
+      default_quantity:
+        description: Quantity of Consumer Default
+        required: true
+        type: number
+permissions: write-all
+env:
+  GH_TOKEN: ${{ secrets.GH_TOKEN }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+  AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+  AWS_SG_ID: ${{ secrets.AWS_SG_ID }}
+  HOST_ECR: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{secrets.AWS_DEFAULT_REGION }}.amazonaws.com
+  ECR_REPOSITORY_PUBLIC: pubsub
+  IMAGE_TAG: ${{ inputs.tag }}
+  BUCKET: zemoinfra
+  BUCKET_KEY: apps/pix-platform/pubsub/consumers/cashout/${{ inputs.name }}.env
+  BUCKET_DIR_ROLLBACK: apps/pix-platform/pubsub/consumers/cashout/rollback
+jobs:
+  get-timestamp:
+    runs-on: ubuntu-latest
+    outputs:
+      stamp: ${{ steps.rollback.outputs.timestamp }}
+    steps:
+      - name: Set timestamp
+        id: rollback
+        run: echo "timestamp=$(date +'%s')" >> $GITHUB_OUTPUT
+      - name: Get timestamp
+        run: echo ${{ steps.rollback.outputs.timestamp}}
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [get-timestamp] 
+    steps:
+      - name: Get IP Runner
+        id: ip
+        uses: haythem/public-ip@v1.2
+      - name: print ip runner
+        run: |
+          echo "ip: "
+          echo ${{ steps.ip.outputs.ipv4}}
+      - name: set enviroment in github runner
+        run: |
+          echo "AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID" >> $GITHUB_ENV
+          echo "AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY" >> $GITHUB_ENV
+          echo "AWS_DEFAULT_REGION=$AWS_DEFAULT_REGION" >> $GITHUB_ENV
+          echo "AWS_SG_NAME=$AWS_SG_NAME" >> $GITHUB_ENV
+      - name: Add Github Actions IP to Security group
+        run: |
+          aws ec2 authorize-security-group-ingress --group-id ${{ env.AWS_SG_ID }} --protocol tcp --port 22 --cidr ${{ steps.ip.outputs.ipv4 }}/32    
+      - name: Into With SSH in Prod
+        if: ${{ inputs.name == 'prod' && !contains(inputs.tag,'rollback') }}
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.AWS_HOST_CASHOUT_CONSUMERS_PROD }}
+          username: ${{ secrets.AWS_USERNAME }}
+          key: ${{ secrets.AWS_PRIVATE_KEY }}
+          port: 22
+          script: |
+            echo "Start docker"
+            sudo service docker start
+            echo "Stop containers"
+            sudo docker kill $(sudo docker ps -f name=pubsub-consumer-cashout-default -q )
+            echo "Remove containers"
+            sudo docker container rm $(sudo docker container ls -f name=pubsub-consumer-cashout-default -aq)
+            echo "Remove images"
+            sudo docker image rm $(sudo docker images -q)
+            echo "Login Docker in ECR"
+            sudo aws ecr get-login-password --region ${{ secrets.AWS_DEFAULT_REGION }} | sudo docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{secrets.AWS_DEFAULT_REGION }}.amazonaws.com
+            echo "Pull Image from ECR"
+            sudo docker pull ${{env.HOST_ECR}}/${{env.ECR_REPOSITORY_PUBLIC}}:${{env.IMAGE_TAG}}
+            echo "Set actual image of container"
+            sudo docker images -q | head -n 1 > .ACTUAL_IMAGE_ID_PUBSUB_CASHOUT_CONSUMERS
+            cat .ACTUAL_IMAGE_ID_PUBSUB_CASHOUT_CONSUMERS
+            echo "Get enviroments from bucket"
+            sudo aws s3 cp s3://${{ env.BUCKET }}/${{ env.BUCKET_KEY }} .env
+            echo "Run Containers"
+            for i in {1..${{ inputs.default_quantity }}};do sudo docker run -d --name pubsub-consumer-cashout-default-$i --log-driver json-file --log-opt max-size=100m --log-opt max-file=3 -e QUEUE_NOTIFY=pubsub_service_notify_cashout_prod --env-file .env --restart on-failure $(head .ACTUAL_IMAGE_ID_PUBSUB_CASHOUT_CONSUMERS); done        
+            echo "Set last container id"
+            sudo docker ps -l -q > .LAST_CONTAINER_ID_PUBSUB_CASHOUT_CONSUMERS
+            cat .LAST_CONTAINER_ID_PUBSUB_CASHOUT_CONSUMERS
+      
+      - name: Into With SSH in Prod when rollback
+        if: ${{ inputs.name == 'prod' && contains(inputs.tag,'rollback') }}
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.AWS_HOST_CASHOUT_CONSUMERS_PROD }}
+          username: ${{ secrets.AWS_USERNAME }}
+          key: ${{ secrets.AWS_PRIVATE_KEY }}
+          port: 22
+          script: |
+            echo "Start docker"
+            sudo service docker start
+            echo "Stop containers"
+            sudo docker kill $(sudo docker ps -f name=pubsub-consumer-cashout-default -q )
+            echo "Remove containers"
+            sudo docker container rm $(sudo docker container ls -f name=pubsub-consumer-cashout-default -aq)
+            echo "Remove images"
+            sudo docker image rm $(sudo docker images -q)
+            echo "Login Docker in ECR"
+            sudo aws ecr get-login-password --region ${{ secrets.AWS_DEFAULT_REGION }} | sudo docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{secrets.AWS_DEFAULT_REGION }}.amazonaws.com
+            echo "Get env for rollbback in s3 bucket"
+            sudo aws s3 cp s3://${{ env.BUCKET }}/${{ env.BUCKET_DIR_ROLLBACK }}/${{ inputs.name }}/$(echo ${{ github.ref_name }} | cut -d '-' -f5)/.env .env
+            echo "Get hash_ecr for rollback in s3 bucket"
+            sudo aws s3 cp s3://${{ env.BUCKET }}/${{ env.BUCKET_DIR_ROLLBACK }}/${{ inputs.name }}/$(echo ${{ github.ref_name }} | cut -d '-' -f5)/hash_ecr hash
+            echo "Pull Image from ECR"
+            sudo docker pull ${{env.HOST_ECR}}/${{env.ECR_REPOSITORY_PUBLIC}}:$(cat hash)
+            echo "Set actual image of container"
+            sudo docker images -q | head -n 1 > .ACTUAL_IMAGE_ID_PUBSUB_CASHOUT_CONSUMERS
+            cat .ACTUAL_IMAGE_ID_PUBSUB_CASHOUT_CONSUMERS
+            echo "Run Containers"
+            for i in {1..${{ inputs.default_quantity }}};do sudo docker run -d --name pubsub-consumer-cashout-default-$i --log-driver json-file --log-opt max-size=100m --log-opt max-file=3 -e QUEUE_NOTIFY=pubsub_service_notify_cashout_prod --env-file .env --restart on-failure $(head .ACTUAL_IMAGE_ID_PUBSUB_CASHOUT_CONSUMERS); done
+            echo "Set last container id"
+            sudo docker ps -l -q > .LAST_CONTAINER_ID_PUBSUB_CASHOUT_CONSUMERS
+            cat .LAST_CONTAINER_ID_PUBSUB_CASHOUT_CONSUMERS
+
+      - name: Into With SSH in Dev
+        if: ${{ inputs.name == 'dev' && !contains(inputs.tag,'rollback') }}
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.AWS_HOST_CASHOUT_CONSUMERS_DEV }}
+          username: ${{ secrets.AWS_USERNAME }}
+          key: ${{ secrets.AWS_PRIVATE_KEY }}
+          port: 22
+          script: |
+            echo "Start docker"
+            sudo service docker start
+            echo "Stop containers"
+            sudo docker kill $(sudo docker ps -f name=pubsub-consumer-cashout-default -q )
+            echo "Remove containers"
+            sudo docker container rm $(sudo docker container ls -f name=pubsub-consumer-cashout-default -aq)
+            echo "Remove images"
+            sudo docker image rm $(sudo docker images -q)
+            echo "Login Docker in ECR"
+            sudo aws ecr get-login-password --region ${{ secrets.AWS_DEFAULT_REGION }} | sudo docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{secrets.AWS_DEFAULT_REGION }}.amazonaws.com
+            echo "Pull Image from ECR"
+            sudo docker pull ${{env.HOST_ECR}}/${{env.ECR_REPOSITORY_PUBLIC}}:${{env.IMAGE_TAG}}
+            echo "Set actual image of container"
+            sudo docker images -q | head -n 1 > .ACTUAL_IMAGE_ID_PUBSUB_CASHOUT_CONSUMERS
+            cat .ACTUAL_IMAGE_ID_PUBSUB_CASHOUT_CONSUMERS
+            echo "Get enviroments from bucket"
+            sudo aws s3 cp s3://${{ env.BUCKET }}/${{ env.BUCKET_KEY }} .env
+            echo "Run Containers"
+            for i in {1..${{ inputs.default_quantity }}};do sudo docker run -d --name pubsub-consumer-cashout-default-$i --log-driver json-file --log-opt max-size=100m --log-opt max-file=3 -e QUEUE_NOTIFY=pubsub_service_notify_cashout --env-file .env --restart on-failure $(head .ACTUAL_IMAGE_ID_PUBSUB_CASHOUT_CONSUMERS); done
+            echo "Set last container id"
+            sudo docker ps -l -q > .LAST_CONTAINER_ID_PUBSUB_CASHOUT_CONSUMERS
+            cat .LAST_CONTAINER_ID_PUBSUB_CASHOUT_CONSUMERS
+
+      - name: Into With SSH in Dev when rollback
+        if: ${{ inputs.name == 'dev' && contains(inputs.tag,'rollback') }}
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.AWS_HOST_CASHOUT_CONSUMERS_DEV }}
+          username: ${{ secrets.AWS_USERNAME }}
+          key: ${{ secrets.AWS_PRIVATE_KEY }}
+          port: 22
+          script: |
+            echo "Start docker"
+            sudo service docker start
+            echo "Stop containers"
+            sudo docker kill $(sudo docker ps -f name=pubsub-consumer-cashout-default -q )
+            echo "Remove containers"
+            sudo docker container rm $(sudo docker container ls -f name=pubsub-consumer-cashout-default -aq)
+            echo "Remove images"
+            sudo docker image rm $(sudo docker images -q)
+            echo "Login Docker in ECR"
+            sudo aws ecr get-login-password --region ${{ secrets.AWS_DEFAULT_REGION }} | sudo docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{secrets.AWS_DEFAULT_REGION }}.amazonaws.com
+            echo "Get env for rollbback in s3 bucket"
+            sudo aws s3 cp s3://${{ env.BUCKET }}/${{ env.BUCKET_DIR_ROLLBACK }}/${{ inputs.name }}/$(echo ${{ github.ref_name }} | cut -d '-' -f5)/.env .env
+            echo "Get hash_ecr for rollback in s3 bucket"
+            sudo aws s3 cp s3://${{ env.BUCKET }}/${{ env.BUCKET_DIR_ROLLBACK }}/${{ inputs.name }}/$(echo ${{ github.ref_name }} | cut -d '-' -f5)/hash_ecr hash
+            echo "Pull Image from ECR"
+            sudo docker pull ${{env.HOST_ECR}}/${{env.ECR_REPOSITORY_PUBLIC}}:$(cat hash)
+            echo "Set actual image of container"
+            sudo docker images -q | head -n 1 > .ACTUAL_IMAGE_ID_PUBSUB_CASHOUT_CONSUMERS
+            cat .ACTUAL_IMAGE_ID_PUBSUB_CASHOUT_CONSUMERS
+            echo "Run Containers"
+            for i in {1..${{ inputs.default_quantity }}};do sudo docker run -d --name pubsub-consumer-cashout-default-$i --log-driver json-file --log-opt max-size=100m --log-opt max-file=3 -e QUEUE_NOTIFY=pubsub_service_notify_cashout --env-file .env --restart on-failure $(head .ACTUAL_IMAGE_ID_PUBSUB_CASHOUT_CONSUMERS); done
+            echo "Set last container id"
+            sudo docker ps -l -q > .LAST_CONTAINER_ID_PUBSUB_CASHOUT_CONSUMERS
+            cat .LAST_CONTAINER_ID_PUBSUB_CASHOUT_CONSUMERS
+      
+      - name: Create system of rollback prod
+        if: ${{ inputs.name == 'prod' && !contains(inputs.tag,'rollback') }} 
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.AWS_HOST_CASHOUT_CONSUMERS_PROD }}
+          username: ${{ secrets.AWS_USERNAME }}
+          key: ${{ secrets.AWS_PRIVATE_KEY }}
+          port: 22
+          script: |
+            echo "Get Timestamp"
+            echo ${{ needs.get-timestamp.outputs.stamp}}
+            echo "Set hash of image docker"
+            echo ${{ env.IMAGE_TAG}} > hash_ecr
+            echo "Send file with environments to bucket"
+            sudo aws s3 cp .env s3://${{ env.BUCKET }}/${{ env.BUCKET_DIR_ROLLBACK }}/${{ inputs.name }}/${{ needs.get-timestamp.outputs.stamp}}/.env
+            echo "Send file with hash the ecr"
+            sudo aws s3 cp hash_ecr s3://${{ env.BUCKET }}/${{ env.BUCKET_DIR_ROLLBACK }}/${{ inputs.name }}/${{ needs.get-timestamp.outputs.stamp}}/hash_ecr
+
+      - name: Create system of rollback dev
+        if: ${{ inputs.name == 'dev' && !contains(inputs.tag,'rollback') }} 
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.AWS_HOST_CASHOUT_CONSUMERS_DEV }}
+          username: ${{ secrets.AWS_USERNAME }}
+          key: ${{ secrets.AWS_PRIVATE_KEY }}
+          port: 22
+          script: |
+            echo "Get Timestamp"
+            echo ${{ needs.get-timestamp.outputs.stamp}}
+            echo "Set hash of image docker"
+            echo ${{ env.IMAGE_TAG}} > hash_ecr
+            echo "Send file with environments to bucket"
+            sudo aws s3 cp .env s3://${{ env.BUCKET }}/${{ env.BUCKET_DIR_ROLLBACK }}/${{ inputs.name }}/${{ needs.get-timestamp.outputs.stamp}}/.env
+            echo "Send file with hash the ecr"
+            sudo aws s3 cp hash_ecr s3://${{ env.BUCKET }}/${{ env.BUCKET_DIR_ROLLBACK }}/${{ inputs.name }}/${{ needs.get-timestamp.outputs.stamp}}/hash_ecr
+      
+      - name: Remove Github Actions IP from security group
+        if: failure() || success()
+        run: |
+          aws ec2 revoke-security-group-ingress --group-id ${{ env.AWS_SG_ID }} --protocol tcp --port 22 --cidr ${{ steps.ip.outputs.ipv4 }}/32
+      - name: End to deploy
+        run: |
+          echo "end to deploy"
+
+  create-release:
+    runs-on: ubuntu-latest
+    needs: [get-timestamp,deploy]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          token: ${{ env.GH_TOKEN }}
+      - name: Create Release Stage and Set Tag
+        if: success() && !contains(inputs.tag,'rollback')
+        uses: badico-cloud-hub/create-release-with-tag@v1
+        with:
+          branch: ${{ github.ref_name }}
+          tag: consumers-cashout-${{inputs.name}}-${{inputs.tag}}-${{ needs.get-timestamp.outputs.stamp }}
+          append-tag: ${{ inputs.name }}
+          upper: true
+      - name: Set Tag in Rollback
+        if: success() && contains(inputs.tag,'rollback')
+        uses: badico-cloud-hub/create-release-with-tag@v1
+        with:
+          branch: ${{ github.ref_name }}
+          append-tag: ${{ inputs.name }}
+          upper: true
+          just-tag: true
