@@ -279,6 +279,21 @@ func TestGetClients(t *testing.T) {
 	log.Printf("output: %+v\n", output)
 }
 
+func TestGetClientByClientId(t *testing.T) {
+	if err := godotenv.Load("../.env"); err != nil {
+		t.Errorf("TestGetClientByClientId: expect(nil) - got(%s)\n", err.Error())
+	}
+	dynamo := infra.NewDynamodbClient()
+	if err := dynamo.Setup(); err != nil {
+		t.Errorf("TestGetClientByClientId: expect(nil) - got(%s)\n", err.Error())
+	}
+	output, err := dynamo.GetClientsByClientId("000000@zemo")
+	if err != nil {
+		t.Errorf("TestGetClientByClientId: expect(nil) - got(%s)\n", err.Error())
+	}
+	log.Printf("output: %+v\n", output)
+}
+
 func TestExistClient(t *testing.T) {
 	if err := godotenv.Load("../.env"); err != nil {
 		t.Errorf("TestExistClient: expect(nil) - got(%s)\n", err.Error())
