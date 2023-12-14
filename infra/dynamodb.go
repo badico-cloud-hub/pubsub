@@ -19,7 +19,7 @@ import (
 	"github.com/google/uuid"
 )
 
-//DynamodbClient is struct for client dynamodb
+// DynamodbClient is struct for client dynamodb
 type DynamodbClient struct {
 	logger                     interfaces.ServiceLogger
 	client                     *dynamodb.DynamoDB
@@ -27,7 +27,7 @@ type DynamodbClient struct {
 	INDEX_AUXILIAR_ASSOCIATION string
 }
 
-//NewDynamodbClient return new client dynamodb
+// NewDynamodbClient return new client dynamodb
 func NewDynamodbClient() *DynamodbClient {
 	return &DynamodbClient{
 		logger:                     utils.NewLogger(os.Stdout),
@@ -36,7 +36,7 @@ func NewDynamodbClient() *DynamodbClient {
 	}
 }
 
-//Setup execute configuration the session of client dynamodb
+// Setup execute configuration the session of client dynamodb
 func (d *DynamodbClient) Setup() error {
 	sess, err := session.NewSessionWithOptions(session.Options{
 		Config: aws.Config{
@@ -51,13 +51,12 @@ func (d *DynamodbClient) Setup() error {
 	return nil
 }
 
-//CreateSubscription execute creation the subscription in dynamo table
+// CreateSubscription execute creation the subscription in dynamo table
 func (d *DynamodbClient) CreateSubscription(subs *dto.SubscriptionDTO) (dto.SubscriptionDTO, error) {
 	subscriptions := []entity.Subscription{}
 	id := uuid.New()
 	subscriptionResult := dto.SubscriptionDTO{SubscriptionId: id.String()}
 	if len(subs.Events) > 0 {
-
 		for _, event := range subs.Events {
 			subscription := entity.Subscription{}
 			subscription.PK = fmt.Sprintf("SUBSCRIPTION#%s", subs.ClientId)
@@ -75,7 +74,6 @@ func (d *DynamodbClient) CreateSubscription(subs *dto.SubscriptionDTO) (dto.Subs
 
 			subscriptions = append(subscriptions, subscription)
 		}
-
 	}
 	putItensError := []entity.Subscription{}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
@@ -102,7 +100,7 @@ func (d *DynamodbClient) CreateSubscription(subs *dto.SubscriptionDTO) (dto.Subs
 	return subscriptionResult, nil
 }
 
-//ListSubscriptions return all subscriptions the client
+// ListSubscriptions return all subscriptions the client
 func (d *DynamodbClient) ListSubscriptions(associationId string) ([]dto.SubscriptionDTO, error) {
 	filt := expression.Key("INDEX_AUXILIAR_PK").Equal(expression.Value(fmt.Sprintf("ASSOCIATION#%s", associationId))).And(expression.Key("INDEX_AUXILIAR_SK").BeginsWith("SUBSCRIPTION_EVENT#"))
 	expr, err := expression.NewBuilder().WithKeyCondition(filt).Build()
@@ -150,7 +148,7 @@ func (d *DynamodbClient) ListSubscriptions(associationId string) ([]dto.Subscrip
 	return resultSubs, nil
 }
 
-//GetSubscription return subscription from event and associationId
+// GetSubscription return subscription from event and associationId
 func (d *DynamodbClient) GetSubscription(associationId, event string) (entity.Subscription, error) {
 	filt := expression.Key("INDEX_AUXILIAR_PK").Equal(expression.Value(fmt.Sprintf("ASSOCIATION#%s", associationId))).And(expression.Key("INDEX_AUXILIAR_SK").BeginsWith(fmt.Sprintf("SUBSCRIPTION_EVENT#%s", event)))
 	expr, err := expression.NewBuilder().WithKeyCondition(filt).Build()
@@ -181,7 +179,7 @@ func (d *DynamodbClient) GetSubscription(associationId, event string) (entity.Su
 	return subscriptions[0], nil
 }
 
-//GetSubscription return subscription from part of a event and associationId
+// GetSubscription return subscription from part of a event and associationId
 func (d *DynamodbClient) GetSubscriptionByAssociationIdAndEvent(associationId, event string) ([]entity.Subscription, error) {
 	filt := expression.Key("INDEX_AUXILIAR_PK").Equal(expression.Value(fmt.Sprintf("ASSOCIATION#%s", associationId))).And(expression.Key("INDEX_AUXILIAR_SK").BeginsWith(fmt.Sprintf("SUBSCRIPTION_EVENT#%s", event)))
 	expr, err := expression.NewBuilder().WithKeyCondition(filt).Build()
@@ -212,7 +210,7 @@ func (d *DynamodbClient) GetSubscriptionByAssociationIdAndEvent(associationId, e
 	return subscriptions, nil
 }
 
-//DeleteSubscription execute remove the event subscription
+// DeleteSubscription execute remove the event subscription
 func (d *DynamodbClient) DeleteSubscription(clientId, event, url string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
@@ -235,7 +233,7 @@ func (d *DynamodbClient) DeleteSubscription(clientId, event, url string) error {
 	return nil
 }
 
-//CreateClients execute creation the clients in dynamo table
+// CreateClients execute creation the clients in dynamo table
 func (d *DynamodbClient) CreateClients(client dto.ClientDTO) (string, error) {
 	secret := os.Getenv("SECRET")
 	plainKey := fmt.Sprintf("%s:%s:%s", client.Identifier, client.Service, secret)
@@ -274,7 +272,7 @@ func (d *DynamodbClient) CreateClients(client dto.ClientDTO) (string, error) {
 	return newApiKey, nil
 }
 
-//CreateScope execute creation the scopes in dynamo table
+// CreateScope execute creation the scopes in dynamo table
 func (d *DynamodbClient) CreateScope(scope dto.ScopeDTO) error {
 	id := uuid.New()
 	newScope := entity.Scopes{
@@ -310,7 +308,7 @@ func (d *DynamodbClient) CreateScope(scope dto.ScopeDTO) error {
 	return nil
 }
 
-//ListClients return all clients the table
+// ListClients return all clients the table
 func (d *DynamodbClient) ListClients() ([]entity.Clients, error) {
 	filt := expression.Name("PK").BeginsWith("CLIENT#")
 	expr, err := expression.NewBuilder().WithFilter(filt).Build()
@@ -338,7 +336,38 @@ func (d *DynamodbClient) ListClients() ([]entity.Clients, error) {
 	return clients, nil
 }
 
-//GetClients return client with service by apiKey hash
+// GetClientsByClientId return client with service by clientId
+func (d *DynamodbClient) GetClientsByClientId(clientId string) (entity.Clients, error) {
+	filt := expression.Name("identifier").Equal(expression.Value(clientId)).And(expression.Name("PK").BeginsWith("CLIENT#"))
+	expr, err := expression.NewBuilder().WithFilter(filt).Build()
+	if err != nil {
+		return entity.Clients{}, err
+	}
+	input := &dynamodb.ScanInput{
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		FilterExpression: expr.Filter(),
+		TableName:        aws.String(d.tableName),
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	output, err := d.client.ScanWithContext(ctx, input)
+	if err != nil {
+		return entity.Clients{}, err
+	}
+	clients := []entity.Clients{}
+	if err := dynamodbattribute.UnmarshalListOfMaps(output.Items, &clients); err != nil {
+		return entity.Clients{}, err
+	}
+	if *output.Count == 0 {
+		return entity.Clients{}, ErrorClientNotFound
+	}
+
+	return clients[0], nil
+}
+
+// GetClients return client with service by apiKey hash
 func (d *DynamodbClient) GetClients(apiKey, service string) (entity.Clients, error) {
 	filt := expression.And(expression.Name("PK").Equal(expression.Value(fmt.Sprintf("CLIENT#%s", apiKey))), expression.Name("SK").Equal(expression.Value(fmt.Sprintf("CLIENT_SERVICE#%s", service))))
 	expr, err := expression.NewBuilder().WithFilter(filt).Build()
@@ -369,7 +398,7 @@ func (d *DynamodbClient) GetClients(apiKey, service string) (entity.Clients, err
 	return clients[0], nil
 }
 
-//ExisteClient return client by identifier in table
+// ExisteClient return client by identifier in table
 func (d *DynamodbClient) ExistClient(association_id, service string) (entity.Clients, bool, error) {
 	filt := expression.Key("INDEX_AUXILIAR_PK").Equal(expression.Value(fmt.Sprintf("ASSOCIATION#%s", association_id))).And(expression.Key("INDEX_AUXILIAR_SK").Equal(expression.Value(fmt.Sprintf("CLIENT_SERVICE#%s", service))))
 	expr, err := expression.NewBuilder().WithKeyCondition(filt).Build()
@@ -401,7 +430,7 @@ func (d *DynamodbClient) ExistClient(association_id, service string) (entity.Cli
 	return clients[0], true, nil
 }
 
-//GetClientByApiKey return client by api key
+// GetClientByApiKey return client by api key
 func (d *DynamodbClient) GetClientByApiKey(apiKey string) (entity.Clients, error) {
 	filt := expression.Key("PK").Equal(expression.Value(fmt.Sprintf("CLIENT#%s", apiKey)))
 	expr, err := expression.NewBuilder().WithKeyCondition(filt).Build()
@@ -433,7 +462,7 @@ func (d *DynamodbClient) GetClientByApiKey(apiKey string) (entity.Clients, error
 	return clients[0], nil
 }
 
-//DeleteClients remove client in table
+// DeleteClients remove client in table
 func (d *DynamodbClient) DeleteClients(apiKey, service string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
@@ -456,7 +485,7 @@ func (d *DynamodbClient) DeleteClients(apiKey, service string) error {
 	return nil
 }
 
-//CreateServices execute creation the services in dynamo table
+// CreateServices execute creation the services in dynamo table
 func (d *DynamodbClient) CreateServices(serv dto.ServicesDTO) (string, error) {
 	secret := os.Getenv("SECRET")
 	services := []entity.Services{}
@@ -508,7 +537,7 @@ func (d *DynamodbClient) CreateServices(serv dto.ServicesDTO) (string, error) {
 	return apiKey, nil
 }
 
-//ListServices return all services with events
+// ListServices return all services with events
 func (d *DynamodbClient) ListServices() ([]entity.Services, error) {
 	filt := expression.Name("PK").BeginsWith("SERVICE#")
 	expr, err := expression.NewBuilder().WithFilter(filt).Build()
@@ -536,7 +565,7 @@ func (d *DynamodbClient) ListServices() ([]entity.Services, error) {
 	return services, nil
 }
 
-//GetServices return all events from service
+// GetServices return all events from service
 func (d *DynamodbClient) GetServices(serviceName string) ([]entity.Services, error) {
 	keyCondition := expression.Key("PK").Equal(expression.Value(fmt.Sprintf("SERVICE#%s", serviceName)))
 	expr, err := expression.NewBuilder().WithKeyCondition(keyCondition).Build()
@@ -564,7 +593,7 @@ func (d *DynamodbClient) GetServices(serviceName string) ([]entity.Services, err
 	return services, nil
 }
 
-//GetServicesEvents return service event from table
+// GetServicesEvents return service event from table
 func (d *DynamodbClient) GetServicesEvents(serviceName, event string) (entity.Services, error) {
 	filt := expression.Key("PK").Equal(expression.Value(fmt.Sprintf("SERVICE#%s", serviceName))).And(expression.Key("SK").BeginsWith(fmt.Sprintf("SERVICE_EVENT#%s", event)))
 	expr, err := expression.NewBuilder().WithKeyCondition(filt).Build()
@@ -593,10 +622,9 @@ func (d *DynamodbClient) GetServicesEvents(serviceName, event string) (entity.Se
 		return entity.Services{}, ErrorServiceEventNotFound
 	}
 	return services[0], nil
-
 }
 
-//GetClientByApiKey return service by api key
+// GetClientByApiKey return service by api key
 func (d *DynamodbClient) GetServiceByApiKey(apiKey string) (entity.Services, error) {
 	filt := expression.Key("INDEX_AUXILIAR_PK").Equal(expression.Value(fmt.Sprintf("SERVICE#%s", apiKey)))
 	expr, err := expression.NewBuilder().WithKeyCondition(filt).Build()
@@ -629,7 +657,7 @@ func (d *DynamodbClient) GetServiceByApiKey(apiKey string) (entity.Services, err
 	return services[0], nil
 }
 
-//DeleteServices execute remotion of events the services
+// DeleteServices execute remotion of events the services
 func (d *DynamodbClient) DeleteServices(serviceName, event string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
@@ -652,7 +680,7 @@ func (d *DynamodbClient) DeleteServices(serviceName, event string) error {
 	return nil
 }
 
-//PutEventService add event to service
+// PutEventService add event to service
 func (d *DynamodbClient) PutEventService(serviceName, idService, event string) (interface{}, error) {
 	secret := os.Getenv("SECRET")
 	serviceEntity := strings.Split(event, ".")[1]
@@ -688,7 +716,7 @@ func (d *DynamodbClient) PutEventService(serviceName, idService, event string) (
 	return output, nil
 }
 
-//ExistService return boolean if exist service in table
+// ExistService return boolean if exist service in table
 func (d *DynamodbClient) ExistService(serviceName string) (bool, string, error) {
 	filt := expression.Key("PK").Equal(expression.Value(fmt.Sprintf("SERVICE#%s", serviceName)))
 	expr, err := expression.NewBuilder().WithKeyCondition(filt).Build()
@@ -718,7 +746,7 @@ func (d *DynamodbClient) ExistService(serviceName string) (bool, string, error) 
 	return false, "", nil
 }
 
-//DescribeTable return informations from table
+// DescribeTable return informations from table
 func (d *DynamodbClient) DescribeTable() (interface{}, error) {
 	input := &dynamodb.DescribeTableInput{
 		TableName: aws.String(d.tableName),

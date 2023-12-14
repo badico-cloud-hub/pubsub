@@ -14,7 +14,7 @@ import (
 	"github.com/badico-cloud-hub/pubsub/utils"
 )
 
-//LoggingMiddleware is middleware to parse logs
+// LoggingMiddleware is middleware to parse logs
 func LoggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		loggerMiddleware := utils.NewLogger(os.Stdout)
@@ -23,7 +23,7 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-//SetupHeadersMiddleware is middleware to set Content-Type
+// SetupHeadersMiddleware is middleware to set Content-Type
 func SetupHeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -31,7 +31,7 @@ func SetupHeadersMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-//AuthorizeMiddleware is middleware to authorize routers
+// AuthorizeMiddleware is middleware to authorize routers
 func AuthorizeMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		logger := utils.NewLogger(os.Stdout)
@@ -39,7 +39,7 @@ func AuthorizeMiddleware(next http.Handler) http.Handler {
 		if err := dynamo.Setup(); err != nil {
 			log.Fatal(err)
 		}
-
+		adminApiKey := r.Header.Get("a-token")
 		bearerToken := r.Header.Get("authorization")
 
 		if bearerToken != "" {
@@ -59,16 +59,49 @@ func AuthorizeMiddleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		if adminApiKey != "" {
+			secretManager := infra.NewSecretManagerClient()
+			adminBase64 := secretManager.Get("ADMIN_APIS_KEY").(string)
+			isValid, admin := utils.ValidateAdminApiKey(adminApiKey, adminBase64)
+			if isValid {
+				clientId := r.Header.Get("client-id")
+				if clientId != "" {
+					client, err := dynamo.GetClientsByClientId(clientId)
+					fmt.Printf("client: %+v", client)
+					fmt.Printf("err: %+v", err)
+					if err != nil {
+						w.WriteHeader(http.StatusForbidden)
+						if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "unalthorized"}); err != nil {
+							logger.Error(err.Error())
+						}
+						return
+					}
+					r.Header.Add("client-id", client.Identifier)
+					r.Header.Add("association-id", client.AssociationId)
+					r.Header.Add("api-key-type", client.Service)
+					r.Header.Add("provider", client.Provider)
+
+				}
+				r.Header.Add("admin-client-id", admin.ClientId)
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			w.WriteHeader(http.StatusForbidden)
+			if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "unalthorized"}); err != nil {
+				logger.Error(err.Error())
+				return
+			}
+		}
 		w.WriteHeader(http.StatusForbidden)
 		if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "unalthorized"}); err != nil {
 			logger.Error(err.Error())
 			return
 		}
-
 	})
 }
 
-//AuthorizeMiddleware is middleware to authorize routers by service API KEY
+// AuthorizeMiddleware is middleware to authorize routers by service API KEY
 func AuthorizeMiddlewareByServiceApiKey(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		logger := utils.NewLogger(os.Stdout)
@@ -97,14 +130,13 @@ func AuthorizeMiddlewareByServiceApiKey(next http.Handler) http.Handler {
 	})
 }
 
-//AuthorizeAdminMiddleware is middleware to authorize admin routers
+// AuthorizeAdminMiddleware is middleware to authorize admin routers
 func AuthorizeAdminMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		logger := utils.NewLogger(os.Stdout)
 		headerApiKey := r.Header.Get("a-token")
 		strBase64 := os.Getenv("ADMIN_APIS_KEY")
 		adminApisKeysJson, err := base64.StdEncoding.DecodeString(strBase64)
-
 		if err != nil {
 			logger.Error(err.Error())
 			w.WriteHeader(http.StatusForbidden)
@@ -137,6 +169,5 @@ func AuthorizeAdminMiddleware(next http.Handler) http.Handler {
 		if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "unalthorized"}); err != nil {
 			logger.Error(err.Error())
 		}
-
 	})
 }
