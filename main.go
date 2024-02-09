@@ -23,17 +23,17 @@ func main() {
 		log.Fatal(err)
 	}
 
-	logManager := infra.NewLogManager()
-	logManager.StartProducer()
-	defer func() {
-		logManager.StopProducer()
-	}()
+	// logManager := infra.NewLogManager()
+	// logManager.StartProducer()
+	// defer func() {
+	// logManager.StopProducer()
+	// }()
 
 	if isServer {
 		fmt.Printf("RUNNING API PUBSUB\n")
 		port := os.Getenv("PORT")
 		api := api.NewServer(port)
-		api.LogManager = logManager
+		// api.LogManager = logManager
 		api.AllRouters()
 		if err := api.Run(); err != nil {
 			log.Fatal(err)
@@ -46,7 +46,7 @@ func main() {
 			log.Fatal(err)
 		}
 
-		setup.SetupNotifyEventConsumer(sqs.Client, wg, logManager)
+		setup.SetupNotifyEventConsumer(sqs.Client, wg)
 		wg.Wait()
 	}
 
