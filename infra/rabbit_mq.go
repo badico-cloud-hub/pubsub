@@ -11,7 +11,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-//RabbitMQ is struct for broker in amazon mq
+// RabbitMQ is struct for broker in amazon mq
 type RabbitMQ struct {
 	url           string
 	conn          *amqp.Connection
@@ -24,16 +24,17 @@ type RabbitMQ struct {
 	queueCallback amqp.Queue
 }
 
-//NewRabbitMQ return new instance of RabbitMQ
+// NewRabbitMQ return new instance of RabbitMQ
 func NewRabbitMQ() *RabbitMQ {
-
-	amzMqUrl := os.Getenv("AMAZON_MQ_URL")
+	secretManager := NewSecretManagerClient()
+	amzMqUrl := secretManager.Get("AMAZON_MQ_URL").(string)
+	fmt.Printf("AMAZON_MQ_URL: %+v\n", amzMqUrl)
 	return &RabbitMQ{
 		url: amzMqUrl,
 	}
 }
 
-//Setup is configure broker
+// Setup is configure broker
 func (r *RabbitMQ) Setup() error {
 	connection, err := amqp.Dial(r.url)
 	if err != nil {
@@ -64,7 +65,6 @@ func (r *RabbitMQ) Setup() error {
 		false,                     // no-wait
 		args,                      // arguments
 	)
-
 	if err != nil {
 		return err
 	}
@@ -126,6 +126,7 @@ func (r *RabbitMQ) NumberOfMessagesQueue() error {
 	fmt.Printf("%s: contains -> %v\n", r.queueDlq.Name, r.queueDlq.Messages)
 	return nil
 }
+
 func (r *RabbitMQ) ConnectionIsClosed() bool {
 	return r.conn.IsClosed()
 }
@@ -133,14 +134,16 @@ func (r *RabbitMQ) ConnectionIsClosed() bool {
 func (r *RabbitMQ) ChannelNotifyIsClosed() bool {
 	return r.chNotify.IsClosed()
 }
+
 func (r *RabbitMQ) ChannelPubSubIsClosed() bool {
 	return r.ch.IsClosed()
 }
+
 func (r *RabbitMQ) ChannelCallbackIsClosed() bool {
 	return r.chCallback.IsClosed()
 }
 
-//Producer is send message to broker
+// Producer is send message to broker
 func (r *RabbitMQ) Producer(queueMessage dto.NotifierDTO) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
@@ -165,7 +168,7 @@ func (r *RabbitMQ) Producer(queueMessage dto.NotifierDTO) error {
 	return nil
 }
 
-//Dlq is send message to dlq broker
+// Dlq is send message to dlq broker
 func (r *RabbitMQ) Dlq(queueMessage dto.QueueMessage) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
@@ -190,7 +193,7 @@ func (r *RabbitMQ) Dlq(queueMessage dto.QueueMessage) error {
 	return nil
 }
 
-//ProducerNotify is send message to notify queue
+// ProducerNotify is send message to notify queue
 func (r *RabbitMQ) ProducerNotify(notify dto.NotifierDTO) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
@@ -215,7 +218,7 @@ func (r *RabbitMQ) ProducerNotify(notify dto.NotifierDTO) error {
 	return nil
 }
 
-//ProducerCashinCallback is send message to callback queue
+// ProducerCashinCallback is send message to callback queue
 func (r *RabbitMQ) ProducerCashinCallback(callbackCashinMessage dto.CallbackCashinMessage) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
@@ -240,7 +243,7 @@ func (r *RabbitMQ) ProducerCashinCallback(callbackCashinMessage dto.CallbackCash
 	return nil
 }
 
-//ProducerCashoutCallback is send message to callback queue
+// ProducerCashoutCallback is send message to callback queue
 func (r *RabbitMQ) ProducerCashoutCallback(callbackCashoutMessage dto.CallbackCashoutMessage) error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
@@ -265,7 +268,7 @@ func (r *RabbitMQ) ProducerCashoutCallback(callbackCashoutMessage dto.CallbackCa
 	return nil
 }
 
-//Consumer is return channel for consume from broker
+// Consumer is return channel for consume from broker
 func (r *RabbitMQ) Consumer() (<-chan amqp.Delivery, error) {
 	msgs, err := r.ch.Consume(
 		r.queue.Name, // queue
@@ -298,7 +301,7 @@ func (r *RabbitMQ) ConsumerNotifyQueue() (<-chan amqp.Delivery, error) {
 	return msgs, nil
 }
 
-//ConsumerDlq is return channel for consume dlq from broker
+// ConsumerDlq is return channel for consume dlq from broker
 func (r *RabbitMQ) ConsumerDlq() (<-chan amqp.Delivery, error) {
 	msgs, err := r.ch.Consume(
 		r.queueDlq.Name, // queue
@@ -315,7 +318,7 @@ func (r *RabbitMQ) ConsumerDlq() (<-chan amqp.Delivery, error) {
 	return msgs, nil
 }
 
-//Release is close connection
+// Release is close connection
 func (r *RabbitMQ) Release() {
 	r.conn.Close()
 }
