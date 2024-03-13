@@ -4,18 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
+	"log"
 	"time"
 
 	"github.com/badico-cloud-hub/pubsub/dto"
 	"github.com/badico-cloud-hub/pubsub/infra"
 
-	"github.com/badico-cloud-hub/log-driver/producer"
 	"github.com/go-resty/resty/v2"
 )
 
 type NotifyEventHandler struct {
-	logManager     *producer.LoggerManager
+	// logManager     *producer.LoggerManager
 	rabbitMqClient *infra.RabbitMQ
 }
 
@@ -28,22 +27,24 @@ type NotifyEventMessageBody struct {
 	Body          map[string]interface{} `json:"body"`
 }
 
-func NewNotifyEventHandler(logManager *producer.LoggerManager, rabbitMqClient *infra.RabbitMQ) *NotifyEventHandler {
+func NewNotifyEventHandler(rabbitMqClient *infra.RabbitMQ) *NotifyEventHandler {
 
 	return &NotifyEventHandler{
-		logManager,
+		// logManager,
 		rabbitMqClient,
 	}
 }
 
 func (h *NotifyEventHandler) Handle(message ConsumerMessage) (map[string]interface{}, error) {
-	handleLog := h.logManager.NewLogger("logger handle function- ", os.Getenv("MACHINE_IP"))
-	handleLog.Infoln("=======================================")
-	handleLog.Infoln("START HANDLE MESSAGE")
-	handleLog.Infoln("=======================================")
+	// handleLog := h.logManager.NewLogger("logger handle function- ", os.Getenv("MACHINE_IP"))
+	log.Println("=======================================")
+	log.Println("START HANDLE MESSAGE")
+	log.Println("=======================================")
+
 	retriesNumber := 3
 	defer func() {
-		handleLog.Infoln("END")
+		log.Printf("logger handle function END\n")
+		// handleLog.Infoln("END")
 	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
@@ -54,11 +55,11 @@ func (h *NotifyEventHandler) Handle(message ConsumerMessage) (map[string]interfa
 		return nil, errors.New("To many retries")
 	}
 
-	handleLog.AddTraceRef(fmt.Sprintf("ClientID = %s", message.QueueMessage.ClientId))
-	handleLog.AddTraceRef(fmt.Sprintf("URL = %s", message.QueueMessage.Url))
-	handleLog.AddTraceRef(fmt.Sprintf("EventName = %s", message.QueueMessage.Body["topic"]))
-	handleLog.AddTraceRef(fmt.Sprintf("CashinId = %s", message.QueueMessage.Body["cashin_id"]))
-	handleLog.AddTraceRef(fmt.Sprintf("CreatedAt = %s", time.Now().Format("2006-01-02T15:04:05.000")))
+	// handleLog.AddTraceRef(fmt.Sprintf("ClientID = %s", message.QueueMessage.ClientId))
+	// handleLog.AddTraceRef(fmt.Sprintf("URL = %s", message.QueueMessage.Url))
+	// handleLog.AddTraceRef(fmt.Sprintf("EventName = %s", message.QueueMessage.Body["topic"]))
+	// handleLog.AddTraceRef(fmt.Sprintf("CashinId = %s", message.QueueMessage.Body["cashin_id"]))
+	// handleLog.AddTraceRef(fmt.Sprintf("CreatedAt = %s", time.Now().Format("2006-01-02T15:04:05.000")))
 
 	if message.QueueMessage.AuthProvider != "" {
 		// authProvider, _ := h.getAuthProvider(notifyEventMessageBody.AuthProvider)
@@ -73,9 +74,9 @@ func (h *NotifyEventHandler) Handle(message ConsumerMessage) (map[string]interfa
 		request.SetHeader("token", "token")
 	}
 
-	handleLog.Infoln("=======================================")
-	handleLog.Infof("Making Request in %s with the message queue: %+v\n", time.Now().Format("2006-01-02T15:04:05.000"), *message.QueueMessage)
-	handleLog.Infoln("=======================================")
+	log.Println("=======================================")
+	log.Printf("Making Request in %s with the message queue: %+v\n", time.Now().Format("2006-01-02T15:04:05.000"), *message.QueueMessage)
+	log.Println("=======================================")
 	fmt.Printf("QueueMessage: %+v\n", *message.QueueMessage)
 	resp, err := request.SetBody(message.QueueMessage.Body).Post(message.QueueMessage.Url)
 
@@ -97,14 +98,14 @@ func (h *NotifyEventHandler) Handle(message ConsumerMessage) (map[string]interfa
 			callbackMessage.DeliveredStatus = "ERROR"
 			callbackMessage.ErrorMessage = err.Error()
 			callbackMessage.StatusCode = resp.StatusCode()
-			handleLog.Infoln("=======================================")
-			handleLog.Infof("ClientId: %+v, Retries: %+v\n", message.QueueMessage.ClientId, message.QueueMessage.Retries)
-			handleLog.Infoln("=======================================")
+			log.Println("=======================================")
+			log.Printf("ClientId: %+v, Retries: %+v\n", message.QueueMessage.ClientId, message.QueueMessage.Retries)
+			log.Println("=======================================")
 			if callbackType == "queue.rabbitmq" {
-				handleLog.Infoln("Notifing callback queue...")
+				log.Println("Notifing callback queue...")
 				err = h.rabbitMqClient.ProducerCashinCallback(callbackMessage)
 				if err != nil {
-					handleLog.Infof("Error sending callback message: %+v\n", err.Error())
+					log.Printf("Error sending callback message: %+v\n", err.Error())
 					return nil, err
 				}
 			}
@@ -113,14 +114,14 @@ func (h *NotifyEventHandler) Handle(message ConsumerMessage) (map[string]interfa
 			return nil, nil
 		}
 
-		handleLog.Infoln("=======================================")
-		handleLog.Infof("StatusCode = %s\n", resp.StatusCode())
-		handleLog.Infoln("=======================================")
+		log.Println("=======================================")
+		log.Printf("StatusCode = %d\n", resp.StatusCode())
+		log.Println("=======================================")
 		if callbackType == "queue.rabbitmq" {
-			handleLog.Infoln("Notifing callback queue...")
+			log.Println("Notifing callback queue...")
 			err = h.rabbitMqClient.ProducerCashinCallback(callbackMessage)
 			if err != nil {
-				handleLog.Infof("Error sending callback message: %+v\n", err.Error())
+				log.Printf("Error sending callback message: %+v\n", err.Error())
 				return nil, err
 			}
 		}
@@ -142,14 +143,14 @@ func (h *NotifyEventHandler) Handle(message ConsumerMessage) (map[string]interfa
 			callbackMessage.DeliveredStatus = "ERROR"
 			callbackMessage.ErrorMessage = err.Error()
 			callbackMessage.StatusCode = resp.StatusCode()
-			handleLog.Infoln("=======================================")
-			handleLog.Infof("ClientId: %+v, Retries: %+v\n", message.QueueMessage.ClientId, message.QueueMessage.Retries)
-			handleLog.Infoln("=======================================")
+			log.Println("=======================================")
+			log.Printf("ClientId: %+v, Retries: %+v\n", message.QueueMessage.ClientId, message.QueueMessage.Retries)
+			log.Println("=======================================")
 			if callbackType == "queue.rabbitmq" {
-				handleLog.Infoln("Notifing callback queue...")
+				log.Println("Notifing callback queue...")
 				err = h.rabbitMqClient.ProducerCashoutCallback(callbackMessage)
 				if err != nil {
-					handleLog.Infof("Error sending callback message: %+v\n", err.Error())
+					log.Printf("Error sending callback message: %+v\n", err.Error())
 					return nil, err
 				}
 			}
@@ -158,14 +159,14 @@ func (h *NotifyEventHandler) Handle(message ConsumerMessage) (map[string]interfa
 			return nil, nil
 		}
 
-		handleLog.Infoln("=======================================")
-		handleLog.Infof("StatusCode = %s\n", resp.StatusCode())
-		handleLog.Infoln("=======================================")
+		log.Println("=======================================")
+		log.Printf("StatusCode = %d\n", resp.StatusCode())
+		log.Println("=======================================")
 		if callbackType == "queue.rabbitmq" {
-			handleLog.Infoln("Notifing callback queue...")
+			log.Println("Notifing callback queue...")
 			err = h.rabbitMqClient.ProducerCashoutCallback(callbackMessage)
 			if err != nil {
-				handleLog.Infof("Error sending callback message: %+v\n", err.Error())
+				log.Printf("Error sending callback message: %+v\n", err.Error())
 				return nil, err
 			}
 		}

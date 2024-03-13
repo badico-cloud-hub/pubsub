@@ -52,13 +52,17 @@ func (r *RabbitMQ) Setup() error {
 		return err
 	}
 
+	args := amqp.Table{
+		amqp.QueueTypeArg: amqp.QueueTypeQuorum,
+	}
+
 	q, err := pubsubChannel.QueueDeclare(
 		os.Getenv("QUEUE_PUBSUB"), // name
 		true,                      // durable
 		false,                     // delete when unused
 		false,                     // exclusive
 		false,                     // no-wait
-		nil,                       // arguments
+		args,                      // arguments
 	)
 
 	if err != nil {
@@ -71,7 +75,7 @@ func (r *RabbitMQ) Setup() error {
 		false,                         // delete when unused
 		false,                         // exclusive
 		false,                         // no-wait
-		nil,                           // arguments
+		args,                          // arguments
 	)
 	if err != nil {
 		return err
@@ -83,7 +87,7 @@ func (r *RabbitMQ) Setup() error {
 		false,                     // delete when unused
 		false,                     // exclusive
 		false,                     // no-wait
-		nil,                       // arguments
+		args,                      // arguments
 	)
 	if err != nil {
 		return err
@@ -95,7 +99,7 @@ func (r *RabbitMQ) Setup() error {
 		false,                       // delete when unused
 		false,                       // exclusive
 		false,                       // no-wait
-		nil,                         // arguments
+		args,                        // arguments
 	)
 
 	r.conn = connection

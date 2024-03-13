@@ -6,12 +6,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
-	"github.com/badico-cloud-hub/log-driver/logger"
-	"github.com/badico-cloud-hub/log-driver/producer"
 	"github.com/badico-cloud-hub/pubsub/dto"
 	"github.com/badico-cloud-hub/pubsub/entity"
 	"github.com/badico-cloud-hub/pubsub/infra"
@@ -28,10 +25,10 @@ type Server struct {
 	routersAuth        *mux.Router
 	routersServiceAuth *mux.Router
 	routersNotAuth     *mux.Router
-	LogManager         *producer.LoggerManager
-	Dynamo             *infra.DynamodbClient
-	Sqs                *infra.SqsClient
-	RabbitMQClient     *infra.RabbitMQ
+	// LogManager         *producer.LoggerManager
+	Dynamo         *infra.DynamodbClient
+	Sqs            *infra.SqsClient
+	RabbitMQClient *infra.RabbitMQ
 }
 
 //NewServer return new service api
@@ -74,8 +71,9 @@ func NewServer(port string) *Server {
 
 //Run execute router and listen the server
 func (s *Server) Run() error {
-	runLog := s.LogManager.NewLogger("logger run application - ", os.Getenv("MACHINE_IP"))
-	runLog.Infof("Listen in port %v", s.port)
+	// runLog := s.LogManager.NewLogger("logger run application - ", os.Getenv("MACHINE_IP"))
+	// runLog.Infof("Listen in port %v", s.port)
+	log.Printf("logger run application - %+v\n", s.port)
 	if err := s.setup(); err != nil {
 		return err
 	}
@@ -226,16 +224,17 @@ func (s *Server) AllRouters() {
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
-	healthLog := s.LogManager.NewLogger("logger health route - ", os.Getenv("MACHINE_IP"))
+	// healthLog := s.LogManager.NewLogger("logger health route - ", os.Getenv("MACHINE_IP"))
 
 	err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "ok"})
 	if err != nil {
-		healthLog.Errorln(err.Error())
+		log.Printf("logger health route - %+v\n", err)
+		// healthLog.Errorln(err.Error())
 	}
 }
 
 func (s *Server) createSubscription(w http.ResponseWriter, r *http.Request) {
-	createSubscriptionLog := s.LogManager.NewLogger("logger create subscription route - ", os.Getenv("MACHINE_IP"))
+	// createSubscriptionLog := s.LogManager.NewLogger("logger create subscription route - ", os.Getenv("MACHINE_IP"))
 	subs := dto.SubscriptionDTO{
 		ClientId:      r.Header.Get("client-id"),
 		AssociationId: r.Header.Get("association-id"),
@@ -243,7 +242,8 @@ func (s *Server) createSubscription(w http.ResponseWriter, r *http.Request) {
 	apiKeyType := r.Header.Get("api-key-type")
 	defer r.Body.Close()
 	if err := json.NewDecoder(r.Body).Decode(&subs); err != nil {
-		createSubscriptionLog.Errorln(err.Error())
+		// createSubscriptionLog.Errorln(err.Error())
+		log.Printf("logger create subscription route - %+v\n", err.Error())
 		return
 	}
 
@@ -251,7 +251,8 @@ func (s *Server) createSubscription(w http.ResponseWriter, r *http.Request) {
 		subscriptionService := strings.Split(event, ".")[0]
 		_, err := s.Dynamo.GetServicesEvents(subscriptionService, event)
 		if err != nil {
-			createSubscriptionLog.Errorln(err.Error())
+			// createSubscriptionLog.Errorln(err.Error())
+			log.Printf("logger create subscription route - %+v\n", err.Error())
 			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
 			return
@@ -265,28 +266,30 @@ func (s *Server) createSubscription(w http.ResponseWriter, r *http.Request) {
 
 	result, err := s.Dynamo.CreateSubscription(&subs)
 	if err != nil {
-		createSubscriptionLog.Errorln(err.Error())
+		// createSubscriptionLog.Errorln(err.Error())
+		log.Printf("logger create subscription route - %+v\n", err.Error())
 		return
 	}
 	jsonToLog, _ := json.Marshal(result)
-	createSubscriptionLog.AddEvent(logger.LogEventEmbed{
-		Name: "CreateSubscription",
-		Type: "Default",
-		Params: []logger.LogEventParam{
-			{Value: string(jsonToLog), Key: "result"},
-		},
-	})
-	createSubscriptionLog.Infof("Create Subscription: %+v", result)
-	if err := json.NewEncoder(w).Encode(&result); err != nil {
-		createSubscriptionLog.Errorln(err.Error())
-		return
-	}
+	log.Printf("logger create subscription route - %+v\n", jsonToLog)
+	// createSubscriptionLog.AddEvent(logger.LogEventEmbed{
+	// 	Name: "CreateSubscription",
+	// 	Type: "Default",
+	// 	Params: []logger.LogEventParam{
+	// 		{Value: string(jsonToLog), Key: "result"},
+	// 	},
+	// })
+	// createSubscriptionLog.Infof("Create Subscription: %+v", result)
+	// if err := json.NewEncoder(w).Encode(&result); err != nil {
+	// 	createSubscriptionLog.Errorln(err.Error())
+	// 	return
+	// }
 }
 
 func (s *Server) listSubscriptions(w http.ResponseWriter, r *http.Request) {
-	listSubscriptionsLog := s.LogManager.NewLogger("logger list subscriptions route - ", os.Getenv("MACHINE_IP"))
+	// listSubscriptionsLog := s.LogManager.NewLogger("logger list subscriptions route - ", os.Getenv("MACHINE_IP"))
 	associationId := r.Header.Get("association-id")
-	listSubscriptionsLog.AddTraceRef(fmt.Sprintf("AssociationId: %s", associationId))
+	// listSubscriptionsLog.AddTraceRef(fmt.Sprintf("AssociationId: %s", associationId))
 	resultSubs, err := s.Dynamo.ListSubscriptions(associationId)
 	subsResponse := []dto.SubscriptionDTO{}
 	for _, sub := range resultSubs {
@@ -298,83 +301,100 @@ func (s *Server) listSubscriptions(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	if err != nil {
-		listSubscriptionsLog.Errorln(err.Error())
+		// listSubscriptionsLog.Errorln(err.Error())
+		log.Printf("logger list subscriptions route - %+v\n", err.Error())
 		return
 	}
-	listSubscriptionsLog.Infof("Subscriptions: %+v", subsResponse)
+	// listSubscriptionsLog.Infof("Subscriptions: %+v", subsResponse)
+	log.Printf("logger list subscriptions route - %+v\n", subsResponse)
 	if err := json.NewEncoder(w).Encode(&subsResponse); err != nil {
-		listSubscriptionsLog.Errorln(err.Error())
+		// listSubscriptionsLog.Errorln(err.Error())
+		log.Printf("logger list subscriptions route - %+v\n", err.Error())
 		return
 	}
 
 }
 
 func (s *Server) deleteSubscription(w http.ResponseWriter, r *http.Request) {
-	deleteSubscriptionLog := s.LogManager.NewLogger("logger delete subscription route - ", os.Getenv("MACHINE_IP"))
+	// deleteSubscriptionLog := s.LogManager.NewLogger("logger delete subscription route - ", os.Getenv("MACHINE_IP"))
 	id := mux.Vars(r)["id"]
 	associationId := r.Header.Get("association-id")
 	clientId := r.Header.Get("client-id")
-	deleteSubscriptionLog.AddTraceRef(fmt.Sprintf("AssociationId: %s", associationId))
-	deleteSubscriptionLog.AddTraceRef(fmt.Sprintf("ClientId: %s", clientId))
+	// deleteSubscriptionLog.AddTraceRef(fmt.Sprintf("AssociationId: %s", associationId))
+	// deleteSubscriptionLog.AddTraceRef(fmt.Sprintf("ClientId: %s", clientId))
+	log.Printf("logger delete subscription route AssociationId - %+v\n", associationId)
+	log.Printf("logger delete subscription route ClientId - %+v\n", clientId)
 	if associationId == "" {
 		if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: "associationId is required"}); err != nil {
-			deleteSubscriptionLog.Errorln(err.Error())
+			// deleteSubscriptionLog.Errorln(err.Error())
+			log.Printf("logger delete subscription route - %+v\n", err.Error())
 			return
 		}
 	}
 	event := r.URL.Query().Get("event")
 	if event != "" {
-		deleteSubscriptionLog.AddTraceRef(fmt.Sprintf("Event: %s", event))
+		// deleteSubscriptionLog.AddTraceRef(fmt.Sprintf("Event: %s", event))
 		subscription, err := s.Dynamo.GetSubscription(associationId, event)
 		if err != nil {
-			deleteSubscriptionLog.Errorln(err.Error())
+			// deleteSubscriptionLog.Errorln(err.Error())
+			log.Printf("logger delete subscription route - %+v\n", err.Error())
 		}
 		if subscription.ClientId == clientId && subscription.SubscriptionEvent == event {
 			if err := s.Dynamo.DeleteSubscription(clientId, event, subscription.SubscriptionUrl); err != nil {
-				deleteSubscriptionLog.Errorln(err.Error())
+				// deleteSubscriptionLog.Errorln(err.Error())
+				log.Printf("logger delete subscription route - %+v\n", err.Error())
 			}
-			deleteSubscriptionLog.Infof("Subscription with AssociationId %s, Event %s, ClientId %s and Id %s deleted!", associationId, event, clientId, id)
+			// deleteSubscriptionLog.Infof("Subscription with AssociationId %s, Event %s, ClientId %s and Id %s deleted!", associationId, event, clientId, id)
+			log.Printf("logger delete subscription route Subscription with AssociationId %s, Event %s, ClientId %s and Id %s deleted!\n", associationId, event, clientId, id)
+
 		}
 	} else {
 		subscriptions, err := s.Dynamo.ListSubscriptions(associationId)
 		if err != nil {
-			deleteSubscriptionLog.Errorln(err.Error())
+			// deleteSubscriptionLog.Errorln(err.Error())
+			log.Printf("logger delete subscription route - %+v\n", err.Error())
 		}
 		if len(subscriptions) == 0 {
-			deleteSubscriptionLog.Infof(fmt.Sprintf("not subscriptions for associationId [%s] and subscription_id [%s]\n", associationId, id))
+			// deleteSubscriptionLog.Infof(fmt.Sprintf("not subscriptions for associationId [%s] and subscription_id [%s]\n", associationId, id))
+			log.Printf("logger delete subscription route not subscriptions for associationId [%s] and subscription_id [%s]\n", associationId, id)
 		}
 		for _, sub := range subscriptions {
 			if sub.SubscriptionId == id && sub.ClientId == clientId {
 				for _, ev := range sub.Events {
 					if err := s.Dynamo.DeleteSubscription(clientId, ev, sub.SubscriptionUrl); err != nil {
-						deleteSubscriptionLog.Errorln(err.Error())
+						// deleteSubscriptionLog.Errorln(err.Error())
+						log.Printf("logger delete subscription route - %+v\n", err.Error())
 					}
 				}
 			}
 		}
-		deleteSubscriptionLog.Infof("Subscription with AssociationId %s, ClientId %s and Id %s deleted!", associationId, clientId, id)
+		// deleteSubscriptionLog.Infof("Subscription with AssociationId %s, ClientId %s and Id %s deleted!", associationId, clientId, id)
+		log.Printf("logger delete subscription route Subscription with AssociationId %s, ClientId %s and Id %s deleted!\n", associationId, clientId, id)
 	}
 	if err := json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "success"}); err != nil {
-		deleteSubscriptionLog.Errorln(err.Error())
+		// deleteSubscriptionLog.Errorln(err.Error())
+		log.Printf("logger delete subscription route - %+v\n", err.Error())
 		return
 	}
 
 }
 
 func (s *Server) createServices(w http.ResponseWriter, r *http.Request) {
-	createServiceLog := s.LogManager.NewLogger("logger create service route - ", os.Getenv("MACHINE_IP"))
+	// createServiceLog := s.LogManager.NewLogger("logger create service route - ", os.Getenv("MACHINE_IP"))
 	serviceDto := dto.ServicesDTO{}
 	defer r.Body.Close()
 	if err := json.NewDecoder(r.Body).Decode(&serviceDto); err != nil {
-		createServiceLog.Errorln(err.Error())
+		// createServiceLog.Errorln(err.Error())
+		log.Printf("logger create service route - %+v\n", err.Error())
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: err.Error()})
 		return
 	}
-	createServiceLog.AddTraceRef(fmt.Sprintf("Service name: %s", serviceDto.Name))
+	// createServiceLog.AddTraceRef(fmt.Sprintf("Service name: %s", serviceDto.Name))
 	existService, _, err := s.Dynamo.ExistService(serviceDto.Name)
 	if err != nil {
-		createServiceLog.Errorln(err.Error())
+		// createServiceLog.Errorln(err.Error())
+		log.Printf("logger create service route - %+v\n", err.Error())
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: err.Error()})
 		return
@@ -387,34 +407,39 @@ func (s *Server) createServices(w http.ResponseWriter, r *http.Request) {
 	//TODO: Verify if array events is empty, and return error
 	apiKey, err := s.Dynamo.CreateServices(serviceDto)
 	if err != nil {
-		createServiceLog.Errorln(err.Error())
+		// createServiceLog.Errorln(err.Error())
+		log.Printf("logger create service route - %+v\n", err.Error())
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(dto.ResponseDTO{Status: "error", Message: err.Error()})
 		return
 	}
-	jsonToLog, _ := json.Marshal(serviceDto)
-	createServiceLog.AddEvent(logger.LogEventEmbed{
-		Name: "CreateService",
-		Type: "Default",
-		Params: []logger.LogEventParam{
-			{Value: string(jsonToLog), Key: "serviceDto"},
-		},
-	})
-	createServiceLog.Infof("Created service with: %+v", serviceDto)
+	// jsonToLog, _ := json.Marshal(serviceDto)
+	// log.Printf("logger create service route - %+v\n", jsonToLog)
+	// createServiceLog.AddEvent(logger.LogEventEmbed{
+	// 	Name: "CreateService",
+	// 	Type: "Default",
+	// 	Params: []logger.LogEventParam{
+	// 		{Value: string(jsonToLog), Key: "serviceDto"},
+	// 	},
+	// })
+	// createServiceLog.Infof("Created service with: %+v", serviceDto)
+	log.Printf("logger create service route Created service with: %+v\n", serviceDto)
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(dto.ServicesDTO{ApiKey: apiKey}); err != nil {
-		createServiceLog.Errorln(err.Error())
+		// createServiceLog.Errorln(err.Error())
+		log.Printf("logger create service route - %+v\n", err.Error())
 		return
 	}
 
 }
 func (s *Server) getServices(w http.ResponseWriter, r *http.Request) {
-	getServicesLog := s.LogManager.NewLogger("logger get service route - ", os.Getenv("MACHINE_IP"))
+	// getServicesLog := s.LogManager.NewLogger("logger get service route - ", os.Getenv("MACHINE_IP"))
 	service := mux.Vars(r)["service"]
-	getServicesLog.AddTraceRef(fmt.Sprintf("Service: %s", service))
+	// getServicesLog.AddTraceRef(fmt.Sprintf("Service: %s", service))
 	serviceEvents, err := s.Dynamo.GetServices(service)
 	if err != nil {
-		getServicesLog.Errorln(err.Error())
+		// getServicesLog.Errorln(err.Error())
+		log.Printf("logger create service route - %+v\n", err.Error())
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
 		return
@@ -429,16 +454,19 @@ func (s *Server) getServices(w http.ResponseWriter, r *http.Request) {
 			serviceDto.Events = append(serviceDto.Events, event.ServiceEvent)
 		}
 
-		getServicesLog.Infof("Service: %+v", serviceDto)
+		// getServicesLog.Infof("Service: %+v", serviceDto)
+		log.Printf("logger create service route Service - %+v\n", serviceDto)
 		if err := json.NewEncoder(w).Encode(&serviceDto); err != nil {
-			getServicesLog.Errorln(err.Error())
+			// getServicesLog.Errorln(err.Error())
+			log.Printf("logger create service route - %+v\n", err.Error())
 			return
 		}
 
 	} else {
 		w.WriteHeader(http.StatusNotFound)
 		if err := json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: infra.ErrorServiceNotFound.Error()}); err != nil {
-			getServicesLog.Errorln(err.Error())
+			// getServicesLog.Errorln(err.Error())
+			log.Printf("logger create service route - %+v\n", err.Error())
 			return
 		}
 	}
@@ -448,12 +476,13 @@ func (s *Server) getServices(w http.ResponseWriter, r *http.Request) {
 func (s *Server) getServicesEvents(w http.ResponseWriter, r *http.Request) {
 	service := mux.Vars(r)["service"]
 	event := r.URL.Query().Get("name")
-	getServiceEventsLog := s.LogManager.NewLogger("logger get service events route - ", os.Getenv("MACHINE_IP"))
-	getServiceEventsLog.AddTraceRef(fmt.Sprintf("Service: %s", service))
-	getServiceEventsLog.AddTraceRef(fmt.Sprintf("Event: %s", event))
+	// getServiceEventsLog := s.LogManager.NewLogger("logger get service events route - ", os.Getenv("MACHINE_IP"))
+	// getServiceEventsLog.AddTraceRef(fmt.Sprintf("Service: %s", service))
+	// getServiceEventsLog.AddTraceRef(fmt.Sprintf("Event: %s", event))
 	serviceEvent, err := s.Dynamo.GetServicesEvents(service, event)
 	if err != nil {
-		getServiceEventsLog.Errorln(err.Error())
+		// getServiceEventsLog.Errorln(err.Error())
+		log.Printf("logger create service route - %+v\n", err.Error())
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
 		return
@@ -465,19 +494,22 @@ func (s *Server) getServicesEvents(w http.ResponseWriter, r *http.Request) {
 		CreatedAt: serviceEvent.CreatedAt,
 		UpdatedAt: serviceEvent.UpdatedAt,
 	}
-	getServiceEventsLog.Infof("Service Event: %+v", serviceEventDTO)
+	// getServiceEventsLog.Infof("Service Event: %+v", serviceEventDTO)
+	log.Printf("logger create service route Service Event: %+v\n", serviceEventDTO)
 	if err := json.NewEncoder(w).Encode(&serviceEventDTO); err != nil {
-		getServiceEventsLog.Errorln(err.Error())
+		// getServiceEventsLog.Errorln(err.Error())
+		log.Printf("logger create service route - %+v\n", err.Error())
 		return
 	}
 
 }
 
 func (s *Server) listServices(w http.ResponseWriter, r *http.Request) {
-	listServiceLog := s.LogManager.NewLogger("logger list services route - ", os.Getenv("MACHINE_IP"))
+	// listServiceLog := s.LogManager.NewLogger("logger list services route - ", os.Getenv("MACHINE_IP"))
 	services, err := s.Dynamo.ListServices()
 	if err != nil {
-		listServiceLog.Errorln(err.Error())
+		// listServiceLog.Errorln(err.Error())
+		log.Printf("logger list services route - %+v\n", err.Error())
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
 		return
@@ -497,84 +529,96 @@ func (s *Server) listServices(w http.ResponseWriter, r *http.Request) {
 	for _, val := range mapServices {
 		allServices = append(allServices, val)
 	}
-	listServiceLog.Infof("Services: %+v", allServices)
+	// listServiceLog.Infof("Services: %+v", allServices)
+	log.Printf("logger list services route Services: %+v\n", allServices)
 	if err := json.NewEncoder(w).Encode(&allServices); err != nil {
-		listServiceLog.Errorln(err.Error())
+		// listServiceLog.Errorln(err.Error())
+		log.Printf("logger list services route Services: %+v\n", allServices)
 		return
 	}
 
 }
 
 func (s *Server) deleteServices(w http.ResponseWriter, r *http.Request) {
-	deleteServiceLog := s.LogManager.NewLogger("logger delete service route - ", os.Getenv("MACHINE_IP"))
+	// deleteServiceLog := s.LogManager.NewLogger("logger delete service route - ", os.Getenv("MACHINE_IP"))
 	service := mux.Vars(r)["service"]
 	eventParam := r.URL.Query().Get("event")
-	deleteServiceLog.AddTraceRef(fmt.Sprintf("Service: %s", service))
+	// deleteServiceLog.AddTraceRef(fmt.Sprintf("Service: %s", service))
 	servicesEvents, err := s.Dynamo.GetServices(service)
 	if err != nil {
-		deleteServiceLog.Errorln(err.Error())
+		// deleteServiceLog.Errorln(err.Error())
+		log.Printf("logger delete service route - %+v\n", err.Error())
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
 		return
 	}
 
 	if eventParam != "" {
-		deleteServiceLog.AddTraceRef(fmt.Sprintf("EventParam: %s", eventParam))
-		deleteServiceLog.Infof("Delete Event Service: %+v", eventParam)
+		// deleteServiceLog.AddTraceRef(fmt.Sprintf("EventParam: %s", eventParam))
+		// deleteServiceLog.Infof("Delete Event Service: %+v", eventParam)
+		log.Printf("logger delete service route Delete Event Service: %+v\n", eventParam)
 		for _, ev := range servicesEvents {
 			if eventParam == ev.ServiceEvent {
 				if err := s.Dynamo.DeleteServices(ev.Name, eventParam); err != nil {
-					deleteServiceLog.Errorln(err.Error())
+					// deleteServiceLog.Errorln(err.Error())
+					log.Printf("logger delete service route - %+v\n", err.Error())
 				}
 				break
 			}
 		}
 	} else {
-		deleteServiceLog.Infof("Delete Service: %+v", service)
+		// deleteServiceLog.Infof("Delete Service: %+v", service)
+		log.Printf("logger delete service route Delete Service: %+v\n", service)
 		for _, ev := range servicesEvents {
 			if err := s.Dynamo.DeleteServices(ev.Name, ev.ServiceEvent); err != nil {
-				deleteServiceLog.Errorln(err.Error())
+				// deleteServiceLog.Errorln(err.Error())
+				log.Printf("logger delete service route - %+v\n", err.Error())
 				continue
 			}
 		}
 	}
 	if err := json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "success"}); err != nil {
-		deleteServiceLog.Errorln(err.Error())
+		// deleteServiceLog.Errorln(err.Error())
+		log.Printf("logger delete service route - %+v\n", err.Error())
 		return
 	}
 }
 
 func (s *Server) addEvent(w http.ResponseWriter, r *http.Request) {
-	addEventServiceLog := s.LogManager.NewLogger("logger add event in service route - ", os.Getenv("MACHINE_IP"))
+	// addEventServiceLog := s.LogManager.NewLogger("logger add event in service route - ", os.Getenv("MACHINE_IP"))
 	service := mux.Vars(r)["service"]
-	addEventServiceLog.AddTraceRef(fmt.Sprintf("Service: %s", service))
+	// addEventServiceLog.AddTraceRef(fmt.Sprintf("Service: %s", service))
 	defer r.Body.Close()
 	payload := dto.ServicesDTO{}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		addEventServiceLog.Errorln(err.Error())
+		// addEventServiceLog.Errorln(err.Error())
+		log.Printf("logger add event in service route - %+v\n", err.Error())
 		return
 	}
 
 	exists, serviceId, err := s.Dynamo.ExistService(service)
 	if err != nil {
-		addEventServiceLog.Errorln(err.Error())
+		// addEventServiceLog.Errorln(err.Error())
+		log.Printf("logger add event in service route - %+v\n", err.Error())
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
 		return
 	}
 	if exists {
-		addEventServiceLog.AddTraceRef(fmt.Sprintf("ServiceId: %s", serviceId))
+		// addEventServiceLog.AddTraceRef(fmt.Sprintf("ServiceId: %s", serviceId))
 		for _, event := range payload.Events {
 			existedEvent, err := s.Dynamo.GetServicesEvents(service, event)
 			if err != nil && err != infra.ErrorServiceEventNotFound {
-				addEventServiceLog.Errorln(err.Error())
+				// addEventServiceLog.Errorln(err.Error())
+				log.Printf("logger add event in service route - %+v\n", err.Error())
 				w.WriteHeader(http.StatusBadRequest)
 				_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
 				return
 			}
 
 			if existedEvent.ServiceEvent == event {
-				addEventServiceLog.Errorln(infra.ErrorServiceEventAlreadyExist.Error())
+				// addEventServiceLog.Errorln(infra.ErrorServiceEventAlreadyExist.Error())
+				log.Printf("logger add event in service route - %+v\n", err.Error())
 				w.WriteHeader(http.StatusBadRequest)
 				_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: infra.ErrorServiceEventAlreadyExist.Error()})
 				return
@@ -583,30 +627,33 @@ func (s *Server) addEvent(w http.ResponseWriter, r *http.Request) {
 			_, err = s.Dynamo.PutEventService(service, serviceId, event)
 
 			if err != nil {
-				addEventServiceLog.Errorln(err.Error())
+				// addEventServiceLog.Errorln(err.Error())
+				log.Printf("logger add event in service route - %+v\n", err.Error())
 				w.WriteHeader(http.StatusBadRequest)
 				_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
 				return
 			}
-			jsonToLog, _ := json.Marshal(payload)
-			addEventServiceLog.AddEvent(logger.LogEventEmbed{
-				Name: "AddEvent",
-				Type: "Default",
-				Params: []logger.LogEventParam{
-					{Value: string(jsonToLog), Key: "serviceDto"},
-				},
-			})
+			// jsonToLog, _ := json.Marshal(payload)
+			// addEventServiceLog.AddEvent(logger.LogEventEmbed{
+			// 	Name: "AddEvent",
+			// 	Type: "Default",
+			// 	Params: []logger.LogEventParam{
+			// 		{Value: string(jsonToLog), Key: "serviceDto"},
+			// 	},
+			// })
 		}
 
 		w.WriteHeader(http.StatusCreated)
 		if err := json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "success"}); err != nil {
-			addEventServiceLog.Errorln(err.Error())
+			// addEventServiceLog.Errorln(err.Error())
+			log.Printf("logger add event in service route - %+v\n", err.Error())
 			return
 		}
 	} else {
 		w.WriteHeader(http.StatusNotFound)
 		if err := json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: infra.ErrorServiceNotFound.Error()}); err != nil {
-			addEventServiceLog.Errorln(err.Error())
+			// addEventServiceLog.Errorln(err.Error())
+			log.Printf("logger add event in service route - %+v\n", err.Error())
 			return
 		}
 
@@ -615,23 +662,26 @@ func (s *Server) addEvent(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) createClients(w http.ResponseWriter, r *http.Request) {
-	createClientLog := s.LogManager.NewLogger("logger create client route - ", os.Getenv("MACHINE_IP"))
+	// createClientLog := s.LogManager.NewLogger("logger create client route - ", os.Getenv("MACHINE_IP"))
 	client := dto.ClientDTO{}
 	defer r.Body.Close()
 	if err := json.NewDecoder(r.Body).Decode(&client); err != nil {
-		createClientLog.Errorln(err.Error())
+		// createClientLog.Errorln(err.Error())
+		log.Printf("logger create client route - %+v\n", err.Error())
 		_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
 		return
 	}
 	_, exists, err := s.Dynamo.ExistClient(client.Identifier, client.Service)
 	if err != nil && err != infra.ErrorClientNotFound {
-		createClientLog.Errorln(err.Error())
+		// createClientLog.Errorln(err.Error())
+		log.Printf("logger create client route - %+v\n", err.Error())
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
 		return
 	}
 	if exists {
-		createClientLog.Errorln(infra.ErrorClientAlreadyExist.Error())
+		// createClientLog.Errorln(infra.ErrorClientAlreadyExist.Error())
+		log.Printf("logger create client route - %+v\n", err.Error())
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: infra.ErrorClientAlreadyExist.Error()})
 		return
@@ -648,53 +698,60 @@ func (s *Server) createClients(w http.ResponseWriter, r *http.Request) {
 		}
 		err := s.Dynamo.CreateScope(newScope)
 		if err != nil {
-			createClientLog.Errorln(err.Error())
+			// createClientLog.Errorln(err.Error())
+			log.Printf("logger create client route - %+v\n", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 			_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
 			return
 		}
 	}
-	jsonToLog, _ := json.Marshal(client)
-	createClientLog.AddEvent(logger.LogEventEmbed{
-		Name: "CreateClient",
-		Type: "Default",
-		Params: []logger.LogEventParam{
-			{Value: string(jsonToLog), Key: "clientDto"},
-		},
-	})
-	createClientLog.Infof("Create Client: %+v", client)
+	// jsonToLog, _ := json.Marshal(client)
+	// createClientLog.AddEvent(logger.LogEventEmbed{
+	// 	Name: "CreateClient",
+	// 	Type: "Default",
+	// 	Params: []logger.LogEventParam{
+	// 		{Value: string(jsonToLog), Key: "clientDto"},
+	// 	},
+	// })
+	// createClientLog.Infof("Create Client: %+v", client)
+	log.Printf("logger create client route Create Client: %+v\n", client)
 	if err != nil {
-		createClientLog.Errorln(err.Error())
+		// createClientLog.Errorln(err.Error())
+		log.Printf("logger create client route - %+v\n", err.Error())
 		_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
 		return
 	}
 	if err := json.NewEncoder(w).Encode(&dto.ClientDTO{ApiKey: apiKey}); err != nil {
-		createClientLog.Errorln(err.Error())
+		// createClientLog.Errorln(err.Error())
+		log.Printf("logger create client route - %+v\n", err.Error())
 		return
 	}
 }
 
 func (s *Server) getClients(w http.ResponseWriter, r *http.Request) {
-	listClientsServiceLog := s.LogManager.NewLogger("logger list clients service route - ", os.Getenv("MACHINE_IP"))
+	// listClientsServiceLog := s.LogManager.NewLogger("logger list clients service route - ", os.Getenv("MACHINE_IP"))
 	service := mux.Vars(r)["service"]
 	identifier := r.URL.Query().Get("identifier")
-	listClientsServiceLog.AddTraceRef(fmt.Sprintf("Service: %s", service))
+	// listClientsServiceLog.AddTraceRef(fmt.Sprintf("Service: %s", service))
 	defer r.Body.Close()
 
 	exist, _, err := s.Dynamo.ExistService(service)
 	if err != nil {
-		listClientsServiceLog.Errorln(err.Error())
+		// listClientsServiceLog.Errorln(err.Error())
+		log.Printf("logger list clients service route - %+v\n", err.Error())
 		_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
 		return
 	}
 	if !exist {
-		listClientsServiceLog.Errorln(infra.ErrorServiceNotFound.Error())
+		// listClientsServiceLog.Errorln(infra.ErrorServiceNotFound.Error())
+		log.Printf("logger list clients service route - %+v\n", err.Error())
 		_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: infra.ErrorServiceNotFound.Error()})
 		return
 	}
 	clients, err := s.Dynamo.ListClients()
 	if err != nil {
-		listClientsServiceLog.Errorln(err.Error())
+		// listClientsServiceLog.Errorln(err.Error())
+		log.Printf("logger list clients service route - %+v\n", err.Error())
 		_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
 		return
 	}
@@ -729,17 +786,20 @@ func (s *Server) getClients(w http.ResponseWriter, r *http.Request) {
 		}
 
 	}
-	listClientsServiceLog.Infof("Response Clients: %+v", responseClients)
+	// listClientsServiceLog.Infof("Response Clients: %+v", responseClients)
+	log.Printf("logger list clients service route Response Clients: %+v\n", responseClients)
 	if err := json.NewEncoder(w).Encode(&responseClients); err != nil {
-		listClientsServiceLog.Errorln(err.Error())
+		// listClientsServiceLog.Errorln(err.Error())
+		log.Printf("logger list clients service route - %+v\n", err.Error())
 		return
 	}
 }
 func (s *Server) listClients(w http.ResponseWriter, r *http.Request) {
-	listClientsLog := s.LogManager.NewLogger("logger list clients route - ", os.Getenv("MACHINE_IP"))
+	// listClientsLog := s.LogManager.NewLogger("logger list clients route - ", os.Getenv("MACHINE_IP"))
 	clients, err := s.Dynamo.ListClients()
 	if err != nil {
-		listClientsLog.Errorln(err.Error())
+		// listClientsLog.Errorln(err.Error())
+		log.Printf("logger list clients route - %+v\n", err.Error())
 		_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
 		return
 	}
@@ -756,25 +816,29 @@ func (s *Server) listClients(w http.ResponseWriter, r *http.Request) {
 		}
 		responseClients = append(responseClients, respClient)
 	}
-	listClientsLog.Infof("List clients: %+v", responseClients)
+	// listClientsLog.Infof("List clients: %+v", responseClients)
+	log.Printf("logger list clients route List clients: %+v\n", responseClients)
 	if err := json.NewEncoder(w).Encode(&responseClients); err != nil {
-		listClientsLog.Errorln(err.Error())
+		// listClientsLog.Errorln(err.Error())
+		log.Printf("logger list clients route - %+v\n", err.Error())
 		return
 	}
 }
 func (s *Server) deleteClients(w http.ResponseWriter, r *http.Request) {
-	deleteClientLog := s.LogManager.NewLogger("logger delete client route - ", os.Getenv("MACHINE_IP"))
+	// deleteClientLog := s.LogManager.NewLogger("logger delete client route - ", os.Getenv("MACHINE_IP"))
 	service := mux.Vars(r)["service"]
 	association_id := mux.Vars(r)["association_id"]
-	deleteClientLog.AddTraceRef(fmt.Sprintf("Service: %s", service))
-	deleteClientLog.AddTraceRef(fmt.Sprintf("AssociationId: %s", association_id))
+	// deleteClientLog.AddTraceRef(fmt.Sprintf("Service: %s", service))
+	// deleteClientLog.AddTraceRef(fmt.Sprintf("AssociationId: %s", association_id))
 
 	client, exists, err := s.Dynamo.ExistClient(association_id, service)
 
 	if err != nil {
-		deleteClientLog.Errorln(err.Error())
+		// deleteClientLog.Errorln(err.Error())
+		log.Printf("logger delete client route - %+v\n", err.Error())
 		if err := json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "success"}); err != nil {
-			deleteClientLog.Errorln(err.Error())
+			// deleteClientLog.Errorln(err.Error())
+			log.Printf("logger delete client route - %+v\n", err.Error())
 		}
 		return
 	}
@@ -782,28 +846,32 @@ func (s *Server) deleteClients(w http.ResponseWriter, r *http.Request) {
 	apiKey := strings.Split(client.PK, "#")[1]
 	if exists {
 		if err := s.Dynamo.DeleteClients(apiKey, service); err != nil {
-			deleteClientLog.Errorln(err.Error())
+			// deleteClientLog.Errorln(err.Error())
+			log.Printf("logger delete client route - %+v\n", err.Error())
 			_ = json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "error", Message: err.Error()})
 			return
 		}
 	}
-	deleteClientLog.Infof("Client with AssociationId %s deleted!", association_id)
+	// deleteClientLog.Infof("Client with AssociationId %s deleted!", association_id)
+	log.Printf("Client with AssociationId %s deleted!\n", association_id)
 	if err := json.NewEncoder(w).Encode(&dto.ResponseDTO{Status: "success"}); err != nil {
-		deleteClientLog.Errorln(err.Error())
+		// deleteClientLog.Errorln(err.Error())
+		log.Printf("logger delete client route - %+v\n", err.Error())
 		return
 	}
 
 }
 
 func (s *Server) notification(w http.ResponseWriter, r *http.Request) {
-	notificationLog := s.LogManager.NewLogger("logger notification route - ", os.Getenv("MACHINE_IP"))
+	// notificationLog := s.LogManager.NewLogger("logger notification route - ", os.Getenv("MACHINE_IP"))
 	notif := dto.NotifierDTO{}
 	defer r.Body.Close()
 	if err := json.NewDecoder(r.Body).Decode(&notif); err != nil {
-		notificationLog.Errorln(err.Error())
+		// notificationLog.Errorln(err.Error())
+		log.Printf("logger notification route - %+v\n", err.Error())
 		return
 	}
-	notificationLog.AddTraceRef(fmt.Sprintf("ClientId: %s", notif.ClientId))
+	// notificationLog.AddTraceRef(fmt.Sprintf("ClientId: %s", notif.ClientId))
 
 	respNotSubscriptions := dto.ResponseNotifyDTO{
 		Ok:     false,
@@ -819,14 +887,16 @@ func (s *Server) notification(w http.ResponseWriter, r *http.Request) {
 		if err != nil && err == infra.ErrorSubscriptinEventNotFound {
 			w.WriteHeader(http.StatusNotFound)
 			if err := json.NewEncoder(w).Encode(&respNotSubscriptions); err != nil {
-				notificationLog.Errorln(err.Error())
+				// notificationLog.Errorln(err.Error())
+				log.Printf("logger notification route - %+v\n", err.Error())
 				return
 			}
 			return
 		}
 
 		if err != nil {
-			notificationLog.Errorln(err.Error())
+			// notificationLog.Errorln(err.Error())
+			log.Printf("logger notification route - %+v\n", err.Error())
 			return
 		}
 
@@ -853,10 +923,12 @@ func (s *Server) notification(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			w.WriteHeader(http.StatusNotFound)
 			if err := json.NewEncoder(w).Encode(&respNotSubscriptions); err != nil {
-				notificationLog.Errorln(err.Error())
+				// notificationLog.Errorln(err.Error())
+				log.Printf("logger notification route - %+v\n", err.Error())
 				return
 			}
-			notificationLog.Errorln(err.Error())
+			// notificationLog.Errorln(err.Error())
+			log.Printf("logger notification route - %+v\n", err.Error())
 			return
 		}
 	}
@@ -867,28 +939,31 @@ func (s *Server) notification(w http.ResponseWriter, r *http.Request) {
 		SentTo: subscriptionsFiltered,
 	}
 
-	notificationLog.Infof("Send notification to Subscriptions: %+v", respNotSubscriptions)
+	// notificationLog.Infof("Send notification to Subscriptions: %+v", respNotSubscriptions)
+	log.Printf("Send notification to Subscriptions: %+v\n", respNotSubscriptions)
 
 	if err := json.NewEncoder(w).Encode(&respNotSubscriptions); err != nil {
-		notificationLog.Errorln(err.Error())
+		// notificationLog.Errorln(err.Error())
+		log.Printf("logger notification route - %+v\n", err.Error())
 		return
 	}
 
 }
 
 func (s *Server) testNotification(w http.ResponseWriter, r *http.Request) {
-	testNotificationLog := s.LogManager.NewLogger("logger test notification route - ", os.Getenv("MACHINE_IP"))
+	// testNotificationLog := s.LogManager.NewLogger("logger test notification route - ", os.Getenv("MACHINE_IP"))
 	notif := dto.NotifierDTO{
 		ClientId:       r.Header.Get("client-id"),
 		AssociationsId: []string{r.Header.Get("association-id")},
 	}
 	defer r.Body.Close()
 	if err := json.NewDecoder(r.Body).Decode(&notif); err != nil {
-		testNotificationLog.Errorln(err.Error())
+		// testNotificationLog.Errorln(err.Error())
+		log.Printf("logger test notification route - %+v\n", err.Error())
 		return
 	}
-	testNotificationLog.AddTraceRef(fmt.Sprintf("Event: %s", notif.Event))
-	testNotificationLog.AddTraceRef(fmt.Sprintf("ClientId: %s", notif.ClientId))
+	// testNotificationLog.AddTraceRef(fmt.Sprintf("Event: %s", notif.Event))
+	// testNotificationLog.AddTraceRef(fmt.Sprintf("ClientId: %s", notif.ClientId))
 
 	respNotSubscriptions := dto.ResponseNotifyDTO{
 		Ok:     false,
@@ -899,19 +974,21 @@ func (s *Server) testNotification(w http.ResponseWriter, r *http.Request) {
 	subscriptionsFiltered := []dto.SubscriptionDTO{}
 	associationId := notif.AssociationsId[0]
 	subscriptions, err := s.Dynamo.GetSubscriptionByAssociationIdAndEvent(associationId, notif.Event)
-	testNotificationLog.AddTraceRef(fmt.Sprintf("AssociationId: %s", associationId))
+	// testNotificationLog.AddTraceRef(fmt.Sprintf("AssociationId: %s", associationId))
 
 	if err != nil && err == infra.ErrorSubscriptinEventNotFound {
 		w.WriteHeader(http.StatusNotFound)
 		if err := json.NewEncoder(w).Encode(&respNotSubscriptions); err != nil {
-			testNotificationLog.Errorln(err.Error())
+			// testNotificationLog.Errorln(err.Error())
+			log.Printf("logger test notification route - %+v\n", err.Error())
 			return
 		}
 		return
 	}
 
 	if err != nil {
-		testNotificationLog.Errorln(err.Error())
+		// testNotificationLog.Errorln(err.Error())
+		log.Printf("logger test notification route - %+v\n", err.Error())
 		return
 	}
 
@@ -935,10 +1012,12 @@ func (s *Server) testNotification(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			w.WriteHeader(http.StatusNotFound)
 			if err := json.NewEncoder(w).Encode(&respNotSubscriptions); err != nil {
-				testNotificationLog.Errorln(err.Error())
+				// testNotificationLog.Errorln(err.Error())
+				log.Printf("logger test notification route - %+v\n", err.Error())
 				return
 			}
-			testNotificationLog.Errorln(err.Error())
+			// testNotificationLog.Errorln(err.Error())
+			log.Printf("logger test notification route - %+v\n", err.Error())
 			return
 		}
 	}
@@ -957,10 +1036,12 @@ func (s *Server) testNotification(w http.ResponseWriter, r *http.Request) {
 		SentTo: subscriptionsResponse,
 	}
 
-	testNotificationLog.Infof("Send notification to Subscriptions: %+v", respNotSubscriptions)
+	// testNotificationLog.Infof("Send notification to Subscriptions: %+v", respNotSubscriptions)
+	log.Printf("Send notification to Subscriptions: %+v\n", respNotSubscriptions)
 
 	if err := json.NewEncoder(w).Encode(&respNotSubscriptions); err != nil {
-		testNotificationLog.Errorln(err.Error())
+		// testNotificationLog.Errorln(err.Error())
+		log.Printf("logger test notification route - %+v\n", err.Error())
 		return
 	}
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"runtime"
 	"strconv"
@@ -11,7 +12,6 @@ import (
 	"time"
 
 	batterygo "github.com/badico-cloud-hub/battery-go/battery"
-	"github.com/badico-cloud-hub/log-driver/producer"
 	"github.com/badico-cloud-hub/pubsub/dto"
 	"github.com/badico-cloud-hub/pubsub/entity"
 	"github.com/badico-cloud-hub/pubsub/infra"
@@ -20,18 +20,18 @@ import (
 )
 
 type PubsubConsumer struct {
-	consumer   ConsumerHandler
-	subs       chan dto.NotifierDTO
-	err        chan *dto.ErrorMessage
-	handle     chan *dto.QueueMessage
-	rabbit     *infra.RabbitMQ
-	logManager *producer.LoggerManager
-	dynamo     *infra.DynamodbClient
-	cache      map[string][]entity.Subscription
-	battery    *infra.Battery
+	consumer ConsumerHandler
+	subs     chan dto.NotifierDTO
+	err      chan *dto.ErrorMessage
+	handle   chan *dto.QueueMessage
+	rabbit   *infra.RabbitMQ
+	// logManager *producer.LoggerManager
+	dynamo  *infra.DynamodbClient
+	cache   map[string][]entity.Subscription
+	battery *infra.Battery
 }
 
-func NewPubsubConsumer(consumer ConsumerHandler, logManager *producer.LoggerManager, dynamoClient *infra.DynamodbClient, rabbitMqClient *infra.RabbitMQ, battery *infra.Battery) (*PubsubConsumer, error) {
+func NewPubsubConsumer(consumer ConsumerHandler, dynamoClient *infra.DynamodbClient, rabbitMqClient *infra.RabbitMQ, battery *infra.Battery) (*PubsubConsumer, error) {
 	err := make(chan *dto.ErrorMessage)
 	handle := make(chan *dto.QueueMessage)
 	subs := make(chan dto.NotifierDTO, 5)
@@ -40,15 +40,15 @@ func NewPubsubConsumer(consumer ConsumerHandler, logManager *producer.LoggerMana
 		return &PubsubConsumer{}, err
 	}
 	return &PubsubConsumer{
-		consumer:   consumer,
-		rabbit:     rabbitMqClient,
-		logManager: logManager,
-		dynamo:     dynamoClient,
-		err:        err,
-		handle:     handle,
-		subs:       subs,
-		cache:      cacheClient,
-		battery:    battery,
+		consumer: consumer,
+		rabbit:   rabbitMqClient,
+		// logManager: logManager,
+		dynamo:  dynamoClient,
+		err:     err,
+		handle:  handle,
+		subs:    subs,
+		cache:   cacheClient,
+		battery: battery,
 	}, nil
 }
 
@@ -87,16 +87,17 @@ func (p *PubsubConsumer) managerChannels(wg *sync.WaitGroup) {
 }
 
 func (p *PubsubConsumer) handleMessage(queueMessage *dto.QueueMessage, wg *sync.WaitGroup) {
-	handleMessageLog := p.logManager.NewLogger("logger handle message - ", os.Getenv("MACHINE_IP"))
+	// handleMessageLog := p.logManager.NewLogger("logger handle message - ", os.Getenv("MACHINE_IP"))
 	consumeMessage := ConsumerMessage{
 		handleChannel: p.handle,
 		QueueMessage:  queueMessage,
 	}
-	handleMessageLog.AddTraceRef(fmt.Sprintf("ClientId: %s", queueMessage.ClientId))
-	handleMessageLog.AddTraceRef(fmt.Sprintf("AssociationId: %s", queueMessage.AssociationId))
+	// handleMessageLog.AddTraceRef(fmt.Sprintf("ClientId: %s", queueMessage.ClientId))
+	// handleMessageLog.AddTraceRef(fmt.Sprintf("AssociationId: %s", queueMessage.AssociationId))
 	// handleMessageLog.AddTraceRef(fmt.Sprintf("QueueUrl: %s", c.queueUrl))
 
-	handleMessageLog.Infoln("Handling message...")
+	// handleMessageLog.Infoln("Handling message...")
+	log.Printf("logger setup notify event consumer Handling message...\n")
 	output, err := p.consumer.Handle(consumeMessage)
 
 	if err != nil {
@@ -113,19 +114,22 @@ func (p *PubsubConsumer) handleMessage(queueMessage *dto.QueueMessage, wg *sync.
 }
 
 func (p *PubsubConsumer) handleError(errorMessage *dto.ErrorMessage, wg *sync.WaitGroup) {
-	handleErrorLog := p.logManager.NewLogger("logger handle error - ", os.Getenv("MACHINE_IP"))
-	handleErrorLog.AddTraceRef(fmt.Sprintf("ClientId: %s", errorMessage.SourceMessage.ClientId))
-	handleErrorLog.AddTraceRef(fmt.Sprintf("AssociationId: %s", errorMessage.SourceMessage.AssociationId))
+	// handleErrorLog := p.logManager.NewLogger("logger handle error - ", os.Getenv("MACHINE_IP"))
+	// handleErrorLog.AddTraceRef(fmt.Sprintf("ClientId: %s", errorMessage.SourceMessage.ClientId))
+	// handleErrorLog.AddTraceRef(fmt.Sprintf("AssociationId: %s", errorMessage.SourceMessage.AssociationId))
 	// handleErrorLog.AddTraceRef(fmt.Sprintf("QueueUrl: %s", p.queueUrl))
 
 	err := p.rabbit.Dlq(*errorMessage.SourceMessage)
 
 	if err != nil {
-		handleErrorLog.Errorln(err.Error())
+		// handleErrorLog.Errorln(err.Error())
+		log.Printf("logger handle error - %+v\n", err.Error())
 	}
 
-	handleErrorLog.Errorf("Error: %s", errorMessage.Reason)
-	handleErrorLog.Infoln("Sending to dlq...")
+	// handleErrorLog.Errorf("Error: %s", errorMessage.Reason)
+	log.Printf("logger handle error Error: %+v\n", errorMessage.Reason)
+	// handleErrorLog.Infoln("Sending to dlq...")
+	log.Printf("logger handle error Sending to dlq...\n")
 
 	fmt.Printf("Error to process message: %+v\n", errorMessage)
 	wg.Done()
@@ -207,11 +211,13 @@ func (p *PubsubConsumer) getSubscriptions(notif dto.NotifierDTO, wg *sync.WaitGr
 
 }
 func (p *PubsubConsumer) consumeServiceNotifyQueue(wg *sync.WaitGroup) {
-	notifyLog := p.logManager.NewLogger("logger consumer queue - ", os.Getenv("MACHINE_IP"))
-	notifyLog.Infoln("Start consume notify queue...")
+	// notifyLog := p.logManager.NewLogger("logger consumer queue - ", os.Getenv("MACHINE_IP"))
+	// notifyLog.Infoln("Start consume notify queue...")
+	log.Printf("logger consumer queue - Start consume notify queue..\n")
 	msgs, err := p.rabbit.ConsumerNotifyQueue()
 	if err != nil {
-		notifyLog.Errorf("failed to fetch queue message %v in a queue pubsub service notify", err)
+		log.Printf("logger consumer queue failed to fetch queue message %v in a queue pubsub service notify\n", err)
+		// notifyLog.Errorf("failed to fetch queue message %v in a queue pubsub service notify", err)
 	}
 	defer wg.Done()
 	var forever chan struct{}
