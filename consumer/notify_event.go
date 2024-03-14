@@ -14,7 +14,6 @@ import (
 )
 
 type NotifyEventHandler struct {
-	// logManager     *producer.LoggerManager
 	rabbitMqClient *infra.RabbitMQ
 }
 
@@ -28,15 +27,12 @@ type NotifyEventMessageBody struct {
 }
 
 func NewNotifyEventHandler(rabbitMqClient *infra.RabbitMQ) *NotifyEventHandler {
-
 	return &NotifyEventHandler{
-		// logManager,
 		rabbitMqClient,
 	}
 }
 
 func (h *NotifyEventHandler) Handle(message ConsumerMessage) (map[string]interface{}, error) {
-	// handleLog := h.logManager.NewLogger("logger handle function- ", os.Getenv("MACHINE_IP"))
 	log.Println("=======================================")
 	log.Println("START HANDLE MESSAGE")
 	log.Println("=======================================")
@@ -44,7 +40,6 @@ func (h *NotifyEventHandler) Handle(message ConsumerMessage) (map[string]interfa
 	retriesNumber := 3
 	defer func() {
 		log.Printf("logger handle function END\n")
-		// handleLog.Infoln("END")
 	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
@@ -55,22 +50,13 @@ func (h *NotifyEventHandler) Handle(message ConsumerMessage) (map[string]interfa
 		return nil, errors.New("To many retries")
 	}
 
-	// handleLog.AddTraceRef(fmt.Sprintf("ClientID = %s", message.QueueMessage.ClientId))
-	// handleLog.AddTraceRef(fmt.Sprintf("URL = %s", message.QueueMessage.Url))
-	// handleLog.AddTraceRef(fmt.Sprintf("EventName = %s", message.QueueMessage.Body["topic"]))
-	// handleLog.AddTraceRef(fmt.Sprintf("CashinId = %s", message.QueueMessage.Body["cashin_id"]))
-	// handleLog.AddTraceRef(fmt.Sprintf("CreatedAt = %s", time.Now().Format("2006-01-02T15:04:05.000")))
+	fmt.Printf("ClientID = %s\n", message.QueueMessage.ClientId)
+	fmt.Printf("URL = %s\n", message.QueueMessage.Url)
+	fmt.Printf("EventName = %s\n", message.QueueMessage.Body["topic"])
+	fmt.Printf("CashinId = %s\n", message.QueueMessage.Body["cashin_id"])
+	fmt.Printf("CreatedAt = %s\n", time.Now().Format("2006-01-02T15:04:05.000"))
 
 	if message.QueueMessage.AuthProvider != "" {
-		// authProvider, _ := h.getAuthProvider(notifyEventMessageBody.AuthProvider)
-
-		// token, ok := authProvider.Authenticate(notifyEventMessageBody.ClientID)
-
-		// if !ok {
-		// 	return nil, errors.New("token not found")
-		// }
-
-		// TODO: SetHeader should be custom with the authProvider name
 		request.SetHeader("token", "token")
 	}
 
@@ -93,10 +79,12 @@ func (h *NotifyEventHandler) Handle(message ConsumerMessage) (map[string]interfa
 			ErrorMessage:    "",
 			StatusCode:      resp.StatusCode(),
 		}
-
-		if err != nil || resp.StatusCode() < 200 || resp.StatusCode() > 299 {
-			callbackMessage.DeliveredStatus = "ERROR"
+		if err != nil {
 			callbackMessage.ErrorMessage = err.Error()
+		}
+
+		if resp.StatusCode() < 200 || resp.StatusCode() > 299 {
+			callbackMessage.DeliveredStatus = "ERROR"
 			callbackMessage.StatusCode = resp.StatusCode()
 			log.Println("=======================================")
 			log.Printf("ClientId: %+v, Retries: %+v\n", message.QueueMessage.ClientId, message.QueueMessage.Retries)
@@ -138,10 +126,12 @@ func (h *NotifyEventHandler) Handle(message ConsumerMessage) (map[string]interfa
 			ErrorMessage:    "",
 			StatusCode:      resp.StatusCode(),
 		}
-
-		if err != nil || resp.StatusCode() < 200 || resp.StatusCode() > 299 {
-			callbackMessage.DeliveredStatus = "ERROR"
+		if err != nil {
 			callbackMessage.ErrorMessage = err.Error()
+		}
+
+		if resp.StatusCode() < 200 || resp.StatusCode() > 299 {
+			callbackMessage.DeliveredStatus = "ERROR"
 			callbackMessage.StatusCode = resp.StatusCode()
 			log.Println("=======================================")
 			log.Printf("ClientId: %+v, Retries: %+v\n", message.QueueMessage.ClientId, message.QueueMessage.Retries)
